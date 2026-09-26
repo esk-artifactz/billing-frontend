@@ -7,6 +7,9 @@ import {
   holdSale, getHeldSales, getHeldSale, deleteHeldSale,
   getReceipt, createCreditBill,
 } from '../api/client';
+import OfflineBanner from '../components/OfflineBanner';
+import Receipt from '../components/Receipt';
+import BarcodeScannerModal from '../components/BarcodeScannerModal';
 
 // ─── Brand colours ────────────────────────────────────────────────────────────
 const B = {
@@ -47,100 +50,6 @@ function Modal({ title, onClose, children, wide }) {
         <div className="overflow-y-auto flex-1 px-5 py-4">{children}</div>
       </div>
     </div>
-  );
-}
-
-// ─── Receipt ──────────────────────────────────────────────────────────────────
-
-function Receipt({ sale, items, onClose }) {
-  const handlePrint = () => {
-    // Small delay lets React flush any state before browser opens print dialog
-    setTimeout(() => window.print(), 50);
-  };
-
-  return (
-    <Modal title="Receipt" onClose={onClose}>
-      <div id="receipt-print" className="font-mono text-sm">
-        {/* Logo + header */}
-        <div className="flex items-center gap-3 mb-3">
-          <img src="/logo.jpg" alt="Crown Tea Hub"
-            style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: `2px solid ${B.gold}`, flexShrink: 0 }} />
-          <div className="flex-1 text-center">
-            <p className="font-extrabold text-base tracking-widest uppercase" style={{ color: B.text, fontFamily: 'Georgia, serif' }}>Crown Tea Hub</p>
-            <p className="text-xs" style={{ color: B.textLight }}>Bakery &amp; Café</p>
-            <p className="text-xs" style={{ color: '#888' }}>Refresh · Relax · Repeat</p>
-          </div>
-        </div>
-        <div className="h-px my-2" style={{ background: `linear-gradient(90deg, transparent, ${B.gold}, transparent)` }} />
-        <div className="text-center mb-3 text-xs space-y-0.5" style={{ color: '#555' }}>
-          <p className="font-semibold">Invoice: {sale.invoice_number}</p>
-          <p>{new Date(sale.sale_time).toLocaleString('en-IN')}</p>
-          <p>Cashier: {sale.cashier_username}</p>
-          {sale.customer_name && (
-            <p className="font-semibold mt-1" style={{ color: B.text }}>
-              Customer: {sale.customer_name}
-              {sale.customer_mobile ? ` · ${sale.customer_mobile}` : ''}
-            </p>
-          )}
-        </div>
-        <hr className="border-dashed my-2" style={{ borderColor: B.goldDark }} />
-        <table className="w-full text-xs mb-3">
-          <thead>
-            <tr className="border-b border-dashed" style={{ borderColor: B.goldDark }}>
-              <th className="text-left pb-1">Item</th>
-              <th className="text-right pb-1">Qty</th>
-              <th className="text-right pb-1">Rate</th>
-              <th className="text-right pb-1">Amt</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item, i) => (
-              <tr key={i} className="border-b border-dotted" style={{ borderColor: '#e8d5a3' }}>
-                <td className="py-1 pr-2 max-w-[120px] truncate">{item.product_name}</td>
-                <td className="py-1 text-right">{parseFloat(item.quantity)}</td>
-                <td className="py-1 text-right">₹{fmt(item.unit_price)}</td>
-                <td className="py-1 text-right">₹{fmt(item.line_total)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <hr className="border-dashed my-2" style={{ borderColor: B.goldDark }} />
-        <div className="space-y-1 text-xs">
-          <div className="flex justify-between"><span style={{ color: '#666' }}>Subtotal</span><span>₹{fmt(sale.subtotal)}</span></div>
-          {parseFloat(sale.discount_total) > 0 && (
-            <div className="flex justify-between text-red-600"><span>Discount</span><span>-₹{fmt(sale.discount_total)}</span></div>
-          )}
-          {parseFloat(sale.round_off) !== 0 && (
-            <div className="flex justify-between text-xs" style={{ color: '#999' }}><span>Round Off</span><span>₹{fmt(sale.round_off)}</span></div>
-          )}
-        </div>
-        <hr className="border-dashed my-2" style={{ borderColor: B.goldDark }} />
-        <div className="flex justify-between font-bold text-base" style={{ color: B.text }}>
-          <span>Total</span><span>₹{fmt(sale.grand_total)}</span>
-        </div>
-        {sale.amount_tendered && (
-          <div className="mt-2 text-xs space-y-1">
-            <div className="flex justify-between"><span>Payment ({(sale.payment_method || '').toUpperCase()})</span><span>₹{fmt(sale.amount_tendered)}</span></div>
-            <div className="flex justify-between font-semibold"><span>Change</span><span>₹{fmt(sale.change_amount)}</span></div>
-          </div>
-        )}
-        <div className="h-px my-3" style={{ background: `linear-gradient(90deg, transparent, ${B.gold}, transparent)` }} />
-        <p className="text-center text-xs" style={{ color: B.textLight }}>Made with love, served with Crown</p>
-        <p className="text-center text-xs mt-0.5" style={{ color: '#aaa' }}>Thank you for visiting!</p>
-      </div>
-      <div className="mt-4 flex gap-3">
-        <button onClick={handlePrint}
-          className="flex-1 font-semibold py-2.5 rounded-xl text-sm transition-all active:scale-95"
-          style={{ background: B.goldGrad, color: B.brown }}>
-          Print Receipt
-        </button>
-        <button onClick={onClose}
-          className="flex-1 font-semibold py-2.5 rounded-xl text-sm border transition-colors"
-          style={{ borderColor: B.gold, color: B.text, background: 'white' }}>
-          Close
-        </button>
-      </div>
-    </Modal>
   );
 }
 
@@ -371,6 +280,9 @@ function CartPanel({ cart, updateQuantity, removeFromCart, onCheckout, onHold, o
               <div className="flex-1 min-w-0 pr-2">
                 <p className="font-semibold text-sm truncate" style={{ color: B.text }}>{item.name}</p>
                 <p className="text-xs" style={{ color: B.textLight }}>₹{fmt(item.selling_price)} each</p>
+                {item.track_stock && item.current_stock != null && parseFloat(item.current_stock) <= 0 && (
+                  <p className="text-xs font-bold mt-0.5" style={{ color: '#dc2626' }}>Out of stock</p>
+                )}
               </div>
               <button onClick={() => removeFromCart(item.id)}
                 className="text-xl leading-none transition-opacity hover:opacity-70" style={{ color: '#c62828' }}>
@@ -442,6 +354,8 @@ export default function Billing() {
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [receiptData, setReceiptData]       = useState(null);
   const [holdingMsg, setHoldingMsg]         = useState('');
+  const [retrievedHoldRef, setRetrievedHoldRef] = useState(null);
+  const [showScanner, setShowScanner]       = useState(false);
 
   const searchRef = useRef(null);
 
@@ -461,7 +375,8 @@ export default function Billing() {
   useEffect(() => {
     const handler = (e) => {
       if (e.key === 'Enter' && document.activeElement === searchRef.current) {
-        const match = products.find(p => p.barcode && p.barcode === searchQuery);
+        // Fallback for scanners that append Enter after the barcode
+        const match = products.find(p => p.barcode && p.barcode === searchQuery.trim());
         if (match) { addToCart(match); setSearchQuery(''); }
       }
     };
@@ -494,6 +409,14 @@ export default function Billing() {
 
   const removeFromCart = (productId) => setCart(prev => prev.filter(i => i.id !== productId));
 
+  // Camera scan result → add matching product, return status message for the modal
+  const handleScanResult = (code) => {
+    const match = products.find(p => p.barcode && p.barcode === code);
+    if (!match) return `No product for barcode ${code}`;
+    addToCart(match);
+    return `Added: ${match.name}`;
+  };
+
   const subtotal  = cart.reduce((s, i) => s + parseFloat(i.selling_price) * i.quantity, 0);
   const gstTotal  = cart.reduce((s, i) => s + parseFloat(i.selling_price) * i.quantity * parseFloat(i.gst_percentage || 0) / 100, 0);
   const grandTotal = subtotal + gstTotal;
@@ -502,9 +425,16 @@ export default function Billing() {
     if (cart.length === 0) return;
     try {
       setHoldingMsg('Holding...');
-      const res = await holdSale({ items: cart.map(i => ({ product_id: i.id, quantity: i.quantity, discount_amount: 0 })), discount_total: 0 });
+      const payload = {
+        items: cart.map(i => ({ product_id: i.id, quantity: i.quantity, discount_amount: 0 })),
+        discount_total: 0,
+      };
+      // Re-holding a retrieved bill updates it in place — no duplicate hold
+      if (retrievedHoldRef) payload.hold_reference = retrievedHoldRef;
+      const res = await holdSale(payload);
       setCart([]);
-      setHoldingMsg(`Held: ${res.data.hold_reference}`);
+      setRetrievedHoldRef(null);
+      setHoldingMsg(retrievedHoldRef ? `Updated: ${res.data.hold_reference}` : `Held: ${res.data.hold_reference}`);
       setTimeout(() => setHoldingMsg(''), 3000);
     } catch (err) {
       setHoldingMsg(err.response?.data?.detail || 'Hold failed');
@@ -512,7 +442,8 @@ export default function Billing() {
     }
   };
 
-  const handleRetrieveHeld = async ({ held_sale, items }) => {
+  const handleRetrieveHeld = ({ held_sale, items }) => {
+    if (!items || !items.length) { alert('Held bill has no items.'); return; }
     const newCart = items.map(item => {
       const product = products.find(p => p.id === item.product_id);
       return product
@@ -520,12 +451,33 @@ export default function Billing() {
         : { id: item.product_id, name: item.product_name, selling_price: item.unit_price, gst_percentage: 0, barcode: null, track_stock: false, current_stock: null, active: true, quantity: parseFloat(item.quantity) };
     });
     setCart(newCart);
-    try { await deleteHeldSale(held_sale.hold_reference); } catch { /* silent */ }
+    // Keep the held record on the server until checkout actually succeeds —
+    // deleting it here loses the bill if checkout fails for any reason.
+    setRetrievedHoldRef(held_sale.hold_reference);
     setShowHeld(false); setShowMobileCart(false);
   };
 
   const handleCheckoutSuccess = async (data) => {
     setShowCheckout(false); setCart([]);
+    // Checkout succeeded — release the held bill if this cart came from one
+    if (retrievedHoldRef) {
+      try {
+        await deleteHeldSale(retrievedHoldRef);
+      } catch (err) {
+        // 404 = already gone (fine). Anything else — tell the user to clean up.
+        if (err.response?.status !== 404) {
+          setHoldingMsg('Bill completed, but the held copy could not be removed — delete it from Held Bills.');
+          setTimeout(() => setHoldingMsg(''), 5000);
+        }
+      }
+      setRetrievedHoldRef(null);
+    }
+    if (data._queued) {
+      // Bill saved locally — will sync when the network returns
+      setHoldingMsg('Bill saved offline — will sync when network returns');
+      setTimeout(() => setHoldingMsg(''), 5000);
+      return;
+    }
     try { const res = await getReceipt(data.invoice_number); setReceiptData(res.data); }
     catch { setReceiptData({ sale: data.sale, items: [] }); }
     fetchProducts();
@@ -615,6 +567,9 @@ export default function Billing() {
         </div>
       </header>
 
+      {/* Offline / pending-sync banner */}
+      <OfflineBanner onSynced={() => fetchProducts()} />
+
       {/* ── Body ── */}
       <div className="flex-1 flex overflow-hidden print:hidden">
 
@@ -647,10 +602,27 @@ export default function Billing() {
                 type="text"
                 placeholder="Search or scan barcode..."
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                onChange={e => {
+                  const q = e.target.value;
+                  setSearchQuery(q);
+                  // Exact barcode match → add to cart instantly (works with
+                  // scanners that don't send Enter, and for typed barcodes)
+                  const match = products.find(p => p.barcode && p.barcode === q.trim());
+                  if (match) { addToCart(match); setSearchQuery(''); }
+                }}
+                autoFocus
                 className="flex-1 text-sm outline-none rounded-xl px-4 py-2.5"
                 style={{ background: B.cream, border: `1.5px solid ${B.gold}`, color: B.brown }}
               />
+              {/* Camera barcode scan (mobile/tablet) */}
+              <button onClick={() => setShowScanner(true)} title="Scan barcode with camera"
+                className="rounded-xl px-3 py-2.5 flex items-center justify-center active:scale-95 transition-all"
+                style={{ background: B.goldGrad, color: B.brown }}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M4 10h16M4 14h16" />
+                </svg>
+              </button>
               <select
                 value={selectedCategory || ''}
                 onChange={e => setSelectedCategory(e.target.value ? parseInt(e.target.value) : null)}
@@ -672,14 +644,16 @@ export default function Billing() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {filteredProducts.map(product => {
                   const inCart = cart.find(i => i.id === product.id);
-                  const lowStock = product.track_stock && product.current_stock != null &&
-                    product.current_stock <= (product.minimum_stock_level || 0);
+                  const outOfStock = product.track_stock && product.current_stock != null &&
+                    parseFloat(product.current_stock) <= 0;
+                  const lowStock = !outOfStock && product.track_stock && product.current_stock != null &&
+                    parseFloat(product.current_stock) <= parseFloat(product.minimum_stock_level || 0);
                   return (
                     <button key={product.id} onClick={() => addToCart(product)}
                       className="relative text-left rounded-2xl overflow-hidden transition-all active:scale-95"
                       style={{
                         background: 'white',
-                        border: inCart ? `2px solid ${B.goldDark}` : `1.5px solid #e8d5a3`,
+                        border: inCart ? `2px solid ${B.goldDark}` : outOfStock ? `1.5px solid #f87171` : `1.5px solid #e8d5a3`,
                         boxShadow: inCart ? `0 4px 14px rgba(180,130,10,0.25)` : '0 2px 6px rgba(0,0,0,0.07)',
                       }}>
                       {/* In-cart badge */}
@@ -689,9 +663,16 @@ export default function Billing() {
                           {inCart.quantity}
                         </span>
                       )}
+                      {/* Out-of-stock ribbon — warning only, doesn't block the sale */}
+                      {outOfStock && (
+                        <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-xs font-bold z-10"
+                          style={{ background: '#dc2626', color: '#fff' }}>
+                          Out
+                        </span>
+                      )}
                       {/* Image area */}
                       <div className="aspect-square flex items-center justify-center text-4xl"
-                        style={{ background: `linear-gradient(135deg, ${B.cream}, ${B.creamMid})` }}>
+                        style={{ background: `linear-gradient(135deg, ${B.cream}, ${B.creamMid})`, opacity: outOfStock ? 0.5 : 1 }}>
                         {getEmoji(product)}
                       </div>
                       {/* Info */}
@@ -699,7 +680,9 @@ export default function Billing() {
                         <p className="font-semibold text-sm leading-tight line-clamp-2" style={{ color: B.text }}>{product.name}</p>
                         {product.brand && <p className="text-xs mt-0.5" style={{ color: B.textLight }}>{product.brand}</p>}
                         <p className="font-extrabold mt-1" style={{ color: B.goldDark }}>₹{fmt(product.selling_price)}</p>
-                        {lowStock && (
+                        {outOfStock ? (
+                          <span className="text-xs font-bold" style={{ color: '#dc2626' }}>Out of stock — selling anyway</span>
+                        ) : lowStock && (
                           <span className="text-xs font-semibold text-red-600">Low stock</span>
                         )}
                       </div>
@@ -751,31 +734,8 @@ export default function Billing() {
       {/* ── Modals ── */}
       {showCheckout && <CheckoutModal cart={cart} onClose={() => setShowCheckout(false)} onSuccess={handleCheckoutSuccess} />}
       {showHeld      && <HeldBillsModal onClose={() => setShowHeld(false)} onRetrieve={handleRetrieveHeld} />}
+      {showScanner   && <BarcodeScannerModal onScan={handleScanResult} onClose={() => setShowScanner(false)} />}
       {receiptData   && <Receipt sale={receiptData.sale} items={receiptData.items} onClose={() => setReceiptData(null)} />}
-
-      {/* Print styles — only the receipt content prints, everything else is hidden */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden !important; }
-          #receipt-print, #receipt-print * { visibility: visible !important; }
-          #receipt-print {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 80mm !important;
-            margin: 0 !important;
-            padding: 8px !important;
-            background: white !important;
-            box-shadow: none !important;
-            border: none !important;
-            font-size: 12px !important;
-          }
-          @page {
-            size: 80mm auto;
-            margin: 0;
-          }
-        }
-      `}</style>
     </div>
   );
 }

@@ -29,7 +29,7 @@ export default function StockAlerts() {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
-  const [tab, setTab]         = useState('out');   // 'out' | 'low'
+  const [tab, setTab]         = useState('out');   // 'out' | 'low' | 'expiry'
   const [search, setSearch]   = useState('');
 
   const fetchAlerts = useCallback(async () => {
@@ -45,24 +45,31 @@ export default function StockAlerts() {
 
   useEffect(() => { fetchAlerts(); }, [fetchAlerts]);
 
+  const q = search.toLowerCase();
   const outOfStock = (data?.out_of_stock || []).filter(p =>
-    !search || p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.category_name.toLowerCase().includes(search.toLowerCase())
+    !search || p.name.toLowerCase().includes(q) || p.category_name.toLowerCase().includes(q)
   );
   const lowStock = (data?.low_stock || []).filter(p =>
-    !search || p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.category_name.toLowerCase().includes(search.toLowerCase())
+    !search || p.name.toLowerCase().includes(q) || p.category_name.toLowerCase().includes(q)
+  );
+  const alreadyExpired = (data?.already_expired || []).filter(p =>
+    !search || p.name.toLowerCase().includes(q) || (p.category_name || '').toLowerCase().includes(q)
+  );
+  const expirySoon = (data?.expiry_soon || []).filter(p =>
+    !search || p.name.toLowerCase().includes(q) || (p.category_name || '').toLowerCase().includes(q)
   );
 
-  const activeList = tab === 'out' ? outOfStock : lowStock;
+  const activeList = tab === 'out' ? outOfStock : tab === 'low' ? lowStock : [...alreadyExpired, ...expirySoon];
 
-  // Group by category
+  // Group by category (for stock tabs)
   const grouped = activeList.reduce((acc, item) => {
     const cat = item.category_name;
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(item);
     return acc;
   }, {});
+
+  const totalExpiryAlerts = (data?.already_expired?.length || 0) + (data?.expiry_soon?.length || 0);
 
   return (
     <div className="min-h-screen" style={{ background: B.pageGrad }}>
@@ -158,6 +165,25 @@ export default function StockAlerts() {
                 <p className="text-xs mt-1" style={{ color: '#aaa' }}>items running low</p>
               </div>
 
+              <div className="rounded-2xl p-5 shadow-sm" style={{ background: 'white', border: '1px solid #7c3aed' }}>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">⏰</span>
+                  <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#7c3aed' }}>Expiry Alerts</p>
+                </div>
+                <p className="text-3xl font-extrabold" style={{ color: '#7c3aed' }}>
+                  {totalExpiryAlerts}
+                </p>
+                <div className="text-xs mt-1 space-y-0.5">
+                  {(data?.already_expired?.length || 0) > 0 && (
+                    <p style={{ color: '#dc2626' }}>{data.already_expired.length} already expired</p>
+                  )}
+                  {(data?.expiry_soon?.length || 0) > 0 && (
+                    <p style={{ color: '#d97706' }}>{data.expiry_soon.length} expiring within 7 days</p>
+                  )}
+                  {totalExpiryAlerts === 0 && <p style={{ color: '#aaa' }}>no expiry issues</p>}
+                </div>
+              </div>
+
               <div className="rounded-2xl p-5 shadow-sm" style={{ background: 'white', border: B.goldBorder }}>
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-2xl">📦</span>
@@ -170,8 +196,29 @@ export default function StockAlerts() {
               </div>
             </div>
 
+            {/* ── Expiry banner (shows even when stock alerts = 0) ── */}
+            {totalExpiryAlerts > 0 && data?.total_alerts === 0 && (
+              <div className="rounded-2xl px-5 py-4 flex items-center gap-4"
+                style={{ background: '#fdf4ff', border: '1.5px solid #7c3aed' }}>
+                <span className="text-2xl flex-shrink-0">⏰</span>
+                <div className="flex-1">
+                  <p className="font-bold text-sm" style={{ color: '#5b21b6' }}>
+                    Expiry reminder — {totalExpiryAlerts} product{totalExpiryAlerts > 1 ? 's' : ''} need attention
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: '#7c3aed' }}>
+                    Check the Expiry Alerts tab below for details.
+                  </p>
+                </div>
+                <button onClick={() => setTab('expiry')}
+                  className="text-xs font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
+                  style={{ background: '#7c3aed', color: '#fff' }}>
+                  View →
+                </button>
+              </div>
+            )}
+
             {/* ── No alerts state ── */}
-            {data?.total_alerts === 0 && (
+            {data?.total_alerts === 0 && totalExpiryAlerts === 0 && (
               <div className="rounded-2xl p-16 text-center" style={{ background: 'white', border: B.goldBorder }}>
                 <div className="text-6xl mb-4">✅</div>
                 <p className="text-xl font-bold" style={{ color: B.text }}>All stock levels are healthy!</p>
@@ -182,7 +229,7 @@ export default function StockAlerts() {
             )}
 
             {/* ── Tabs + search ── */}
-            {data?.total_alerts > 0 && (
+            {(data?.total_alerts > 0 || totalExpiryAlerts > 0) && (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   {/* Tab buttons */}
@@ -213,6 +260,19 @@ export default function StockAlerts() {
                         </span>
                       )}
                     </button>
+                    <button onClick={() => setTab('expiry')}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
+                      style={tab === 'expiry'
+                        ? { background: '#7c3aed', color: 'white', boxShadow: '0 2px 8px rgba(124,58,237,0.35)' }
+                        : { background: 'white', border: '1px solid #7c3aed', color: '#7c3aed' }}>
+                      ⏰ Expiry Alerts
+                      {totalExpiryAlerts > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-extrabold"
+                          style={{ background: tab === 'expiry' ? 'rgba(255,255,255,0.25)' : '#ede9fe', color: '#7c3aed' }}>
+                          {totalExpiryAlerts}
+                        </span>
+                      )}
+                    </button>
                   </div>
 
                   {/* Search */}
@@ -230,20 +290,170 @@ export default function StockAlerts() {
                     <button onClick={() => window.print()}
                       className="text-sm font-bold px-5 py-2.5 rounded-xl active:scale-95 transition-all"
                       style={{ background: B.bgGrad, color: B.goldLight, border: `1px solid ${B.gold}` }}>
-                      🖨️ Print Order List
+                      🖨️ Print List
                     </button>
                   </div>
                 )}
 
                 {/* ── Empty search result ── */}
-                {activeList.length === 0 && (
+                {activeList.length === 0 && tab !== 'expiry' && (
                   <div className="rounded-2xl p-12 text-center" style={{ background: 'white', border: B.goldBorder }}>
                     <p className="font-bold" style={{ color: B.text }}>No items match your search</p>
                   </div>
                 )}
 
-                {/* ── Grouped item cards ── */}
-                <div id="order-list-print" className="space-y-5">
+                {/* ── EXPIRY TAB CONTENT ── */}
+                {tab === 'expiry' && (
+                  <div id="order-list-print" className="space-y-5">
+                    {/* Print header */}
+                    <div className="hidden print-only text-center mb-4">
+                      <p className="text-lg font-extrabold">Crown Tea Hub — Expiry Alert List</p>
+                      <p className="text-sm">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                      <hr className="my-2" />
+                    </div>
+
+                    {/* Already expired */}
+                    {alreadyExpired.length > 0 && (
+                      <div className="rounded-2xl overflow-hidden shadow-sm" style={{ border: '1.5px solid #dc2626' }}>
+                        <div className="px-5 py-3 flex items-center justify-between" style={{ background: '#fee2e2' }}>
+                          <div>
+                            <h3 className="font-extrabold text-sm uppercase tracking-wide" style={{ color: '#7f1d1d' }}>
+                              Already Expired
+                            </h3>
+                            <p className="text-xs mt-0.5" style={{ color: '#b91c1c' }}>
+                              These products must be removed from sale immediately
+                            </p>
+                          </div>
+                          <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ background: '#dc2626', color: '#fff' }}>
+                            {alreadyExpired.length} product{alreadyExpired.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="divide-y" style={{ background: '#fff', borderColor: '#fecaca' }}>
+                          {alreadyExpired.map(item => (
+                            <div key={item.id} className="px-5 py-4 flex items-start justify-between gap-4 flex-wrap">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold" style={{ color: '#7f1d1d' }}>{item.name}</span>
+                                  {item.brand && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+                                      style={{ background: '#fff9ee', border: B.goldBorder, color: B.textLight }}>
+                                      {item.brand}
+                                    </span>
+                                  )}
+                                  <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+                                    style={{ background: '#f3f4f6', color: '#6b7280' }}>
+                                    {item.unit}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-3 mt-1.5 text-xs" style={{ color: '#6b7280' }}>
+                                  <span>Category: <strong>{item.category_name}</strong></span>
+                                  {item.supplier_name && <span>Supplier: <strong>{item.supplier_name}</strong></span>}
+                                  {item.current_stock > 0 && (
+                                    <span style={{ color: '#dc2626' }}>Stock: <strong>{fmtN(item.current_stock)} {item.unit}</strong></span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap gap-3 mt-1 text-xs">
+                                  <span className="font-semibold" style={{ color: '#dc2626' }}>
+                                    Expired: {item.expiry_date}
+                                    ({Math.abs(item.days_left)} day{Math.abs(item.days_left) !== 1 ? 's' : ''} ago)
+                                  </span>
+                                  {item.mfg_date && (
+                                    <span style={{ color: '#6b7280' }}>Mfg: {item.mfg_date}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="text-xs font-extrabold px-3 py-1.5 rounded-full flex-shrink-0"
+                                style={{ background: '#dc2626', color: '#fff' }}>
+                                EXPIRED
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Expiring within 7 days */}
+                    {expirySoon.length > 0 && (
+                      <div className="rounded-2xl overflow-hidden shadow-sm" style={{ border: '1.5px solid #d97706' }}>
+                        <div className="px-5 py-3 flex items-center justify-between" style={{ background: '#fef3c7' }}>
+                          <div>
+                            <h3 className="font-extrabold text-sm uppercase tracking-wide" style={{ color: '#78350f' }}>
+                              Expiring Within 7 Days
+                            </h3>
+                            <p className="text-xs mt-0.5" style={{ color: '#b45309' }}>
+                              Action required before expiry — sell, discount, or return to supplier
+                            </p>
+                          </div>
+                          <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ background: '#d97706', color: '#fff' }}>
+                            {expirySoon.length} product{expirySoon.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="divide-y" style={{ background: '#fff', borderColor: '#fde68a' }}>
+                          {expirySoon.map(item => {
+                            const urgentColor = item.days_left <= 2 ? '#dc2626' : item.days_left <= 4 ? '#d97706' : '#b45309';
+                            return (
+                              <div key={item.id} className="px-5 py-4 flex items-start justify-between gap-4 flex-wrap">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-bold" style={{ color: '#78350f' }}>{item.name}</span>
+                                    {item.brand && (
+                                      <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+                                        style={{ background: '#fff9ee', border: B.goldBorder, color: B.textLight }}>
+                                        {item.brand}
+                                      </span>
+                                    )}
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+                                      style={{ background: '#f3f4f6', color: '#6b7280' }}>
+                                      {item.unit}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-3 mt-1.5 text-xs" style={{ color: '#6b7280' }}>
+                                    <span>Category: <strong>{item.category_name}</strong></span>
+                                    {item.supplier_name && <span>Supplier: <strong>{item.supplier_name}</strong></span>}
+                                    {item.current_stock > 0 && (
+                                      <span style={{ color: B.text }}>Stock: <strong>{fmtN(item.current_stock)} {item.unit}</strong></span>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap gap-3 mt-1 text-xs">
+                                    <span className="font-bold" style={{ color: urgentColor }}>
+                                      Expires: {item.expiry_date} —{' '}
+                                      {item.days_left === 0 ? 'TODAY' : `${item.days_left} day${item.days_left !== 1 ? 's' : ''} left`}
+                                    </span>
+                                    {item.mfg_date && (
+                                      <span style={{ color: '#6b7280' }}>Mfg: {item.mfg_date}</span>
+                                    )}
+                                  </div>
+                                  {/* Countdown bar */}
+                                  <div className="mt-2 h-2 rounded-full overflow-hidden w-48 max-w-full" style={{ background: '#f0e8d0' }}>
+                                    <div className="h-full rounded-full transition-all"
+                                      style={{ width: `${Math.round((item.days_left / 7) * 100)}%`, background: urgentColor }} />
+                                  </div>
+                                </div>
+                                <span className="text-xs font-extrabold px-3 py-1.5 rounded-full flex-shrink-0"
+                                  style={{ background: urgentColor, color: '#fff' }}>
+                                  {item.days_left === 0 ? 'TODAY!' : item.days_left <= 2 ? 'CRITICAL' : 'ACT SOON'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {alreadyExpired.length === 0 && expirySoon.length === 0 && (
+                      <div className="rounded-2xl p-12 text-center" style={{ background: 'white', border: '1px solid #7c3aed' }}>
+                        <div className="text-5xl mb-3">✅</div>
+                        <p className="font-bold text-lg" style={{ color: '#5b21b6' }}>No expiry alerts!</p>
+                        <p className="text-sm mt-1" style={{ color: '#7c3aed' }}>
+                          No products are expired or expiring within the next 7 days.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Grouped item cards (stock tabs only) ── */}
+                {tab !== 'expiry' && <div id="order-list-print" className="space-y-5">
                   {/* Print header (only visible when printing) */}
                   <div className="hidden print-only text-center mb-4">
                     <p className="text-lg font-extrabold">Crown Tea Hub — Order List</p>
@@ -345,7 +555,7 @@ export default function StockAlerts() {
                       </div>
                     </div>
                   ))}
-                </div>
+                </div>}
               </>
             )}
           </>

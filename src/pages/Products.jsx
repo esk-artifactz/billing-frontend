@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getProducts, createProduct, updateProduct, deleteProduct, getCategories } from '../api/client';
+import { getProducts, createProduct, updateProduct, deleteProduct, getCategories, getSuppliers } from '../api/client';
 
 const B = {
   darkBrown: '#2d1a0e',
@@ -38,6 +38,7 @@ const EMPTY_FORM = {
   unit: 'pcs', purchase_price: '', mrp: '', selling_price: '', gst_percentage: '',
   track_stock: true, current_stock: '', minimum_stock_level: '',
   quick_sale_enabled: false, active: true,
+  supplier_id: '', mfg_date: '', expiry_date: '', fssai_no: '',
 };
 
 function Label({ children, required }) {
@@ -68,6 +69,7 @@ export default function Products() {
 
   const [products, setProducts]     = useState([]);
   const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers]   = useState([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState('');
   const [modal, setModal]           = useState(null);
@@ -93,7 +95,12 @@ export default function Products() {
     catch { /* silent */ }
   }, []);
 
-  useEffect(() => { fetchProducts(); fetchCategories(); }, [fetchProducts, fetchCategories]);
+  const fetchSuppliers = useCallback(async () => {
+    try { const res = await getSuppliers(); setSuppliers((res.data.suppliers || []).filter(s => s.active !== false)); }
+    catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { fetchProducts(); fetchCategories(); fetchSuppliers(); }, [fetchProducts, fetchCategories, fetchSuppliers]);
 
   const openAdd  = () => { setForm(EMPTY_FORM); setFormError(''); setModal('add'); };
   const openEdit = (p) => {
@@ -108,6 +115,10 @@ export default function Products() {
       current_stock: p.current_stock || '', minimum_stock_level: p.minimum_stock_level || '',
       quick_sale_enabled: p.quick_sale_enabled || false,
       active: p.active !== undefined ? p.active : true,
+      supplier_id: p.supplier_id || '',
+      mfg_date: p.mfg_date?.slice(0, 10) || '',
+      expiry_date: p.expiry_date?.slice(0, 10) || '',
+      fssai_no: p.fssai_no || '',
     });
     setFormError(''); setModal('edit');
   };
@@ -115,8 +126,22 @@ export default function Products() {
 
   const handleChange = (e) => {
     const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-    setForm(f => ({ ...f, [e.target.name]: val }));
+    const name = e.target.name;
+    setForm(f => {
+      const updated = { ...f, [name]: val };
+      // Auto-fill FSSAI from selected supplier
+      if (name === 'supplier_id') {
+        const sup = suppliers.find(s => String(s.id) === String(val));
+        if (sup?.fssai_no && !f.fssai_no) {
+          updated.fssai_no = sup.fssai_no;
+        }
+      }
+      return updated;
+    });
   };
+
+  // Derived: selected supplier
+  const formSupplier = suppliers.find(s => String(s.id) === String(form.supplier_id)) || null;
 
   const buildPayload = () => ({
     ...form,
@@ -126,6 +151,10 @@ export default function Products() {
     gst_percentage: parseFloat(form.gst_percentage) || 0,
     current_stock: form.track_stock ? (parseFloat(form.current_stock) || 0) : null,
     minimum_stock_level: form.track_stock ? (parseFloat(form.minimum_stock_level) || 0) : null,
+    supplier_id: form.supplier_id || null,
+    mfg_date: form.mfg_date || null,
+    expiry_date: form.expiry_date || null,
+    fssai_no: form.fssai_no || null,
   });
 
   const handleAdd = async (e) => {
@@ -241,7 +270,7 @@ export default function Products() {
               <table className="w-full text-sm" style={{ minWidth: 900 }}>
                 <thead>
                   <tr style={{ background: B.bgGrad }}>
-                    {['#','Name','Category','Brand','Unit','Purchase','MRP','Selling','GST%','Track','Stock','Min','Quick','Active','Actions'].map(h => (
+                    {['#','Name','Category','Brand','Supplier','Unit','Purchase','MRP','Selling','GST%','Track','Stock','Min','Expiry','Active','Actions'].map(h => (
                       <th key={h} className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
                         style={{ color: B.goldLight }}>
                         {h}
@@ -259,6 +288,9 @@ export default function Products() {
                         {getCatName(p.category_id)}{p.subcategory ? <span style={{ color: '#bbb' }}> / {p.subcategory}</span> : ''}
                       </td>
                       <td className="px-3 py-2.5" style={{ color: B.textLight }}>{p.brand || '—'}</td>
+                      <td className="px-3 py-2.5 text-xs" style={{ color: B.textLight }}>
+                        {suppliers.find(s => s.id === p.supplier_id)?.name || '—'}
+                      </td>
                       <td className="px-3 py-2.5" style={{ color: B.textLight }}>{p.unit}</td>
                       <td className="px-3 py-2.5 font-medium" style={{ color: B.text }}>₹{parseFloat(p.purchase_price).toFixed(2)}</td>
                       <td className="px-3 py-2.5 font-medium" style={{ color: B.text }}>₹{parseFloat(p.mrp).toFixed(2)}</td>
@@ -275,10 +307,14 @@ export default function Products() {
                       <td className="px-3 py-2.5" style={{ color: B.textLight }}>
                         {p.track_stock && p.minimum_stock_level != null ? parseFloat(p.minimum_stock_level).toFixed(2) : '—'}
                       </td>
-                      <td className="px-3 py-2.5">
-                        {p.quick_sale_enabled
-                          ? <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ background: '#fff3e0', color: '#e65100' }}>Yes</span>
-                          : <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ background: '#f5f5f5', color: '#777' }}>No</span>}
+                      <td className="px-3 py-2.5 text-xs whitespace-nowrap">
+                        {p.expiry_date ? (() => {
+                          const exp = new Date(p.expiry_date);
+                          const today = new Date();
+                          const diffDays = Math.ceil((exp - today) / (1000*60*60*24));
+                          const color = diffDays <= 30 ? '#dc2626' : diffDays <= 90 ? '#d97706' : '#16a34a';
+                          return <span className="font-semibold" style={{ color }}>{p.expiry_date.slice(0,10)}</span>;
+                        })() : <span style={{ color: '#bbb' }}>—</span>}
                       </td>
                       <td className="px-3 py-2.5">
                         {p.active
@@ -344,6 +380,37 @@ export default function Products() {
                     <Label>Brand</Label>
                     <input type="text" name="brand" value={form.brand} onChange={handleChange}
                       placeholder="e.g., Tata" style={inputSty} />
+                  </div>
+                  {/* Supplier */}
+                  <div className="col-span-2 sm:col-span-1">
+                    <Label>Supplier</Label>
+                    <select name="supplier_id" value={form.supplier_id} onChange={handleChange} style={inputSty}>
+                      <option value="">— None —</option>
+                      {suppliers.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}{s.phone ? ` · ${s.phone}` : ''}</option>
+                      ))}
+                    </select>
+                    {formSupplier?.fssai_no && (
+                      <p className="text-xs mt-1 font-semibold" style={{ color: '#b45309' }}>
+                        FSSAI: <span className="font-mono">{formSupplier.fssai_no}</span>
+                      </p>
+                    )}
+                  </div>
+                  {/* FSSAI */}
+                  <div>
+                    <Label>FSSAI No. <span className="font-normal normal-case text-gray-400">(optional)</span></Label>
+                    <input type="text" name="fssai_no" value={form.fssai_no} onChange={handleChange}
+                      placeholder="14-digit licence no." maxLength={20}
+                      style={{ ...inputSty, fontFamily: 'monospace' }} />
+                  </div>
+                  {/* Mfg + Expiry */}
+                  <div>
+                    <Label>Mfg Date <span className="font-normal normal-case text-gray-400">(optional)</span></Label>
+                    <input type="date" name="mfg_date" value={form.mfg_date} onChange={handleChange} style={inputSty} />
+                  </div>
+                  <div>
+                    <Label>Expiry Date <span className="font-normal normal-case text-gray-400">(optional)</span></Label>
+                    <input type="date" name="expiry_date" value={form.expiry_date} onChange={handleChange} style={inputSty} />
                   </div>
                   <div>
                     <Label required>Category</Label>

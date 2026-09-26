@@ -1,0 +1,17 @@
+{
+  "name": "Crown Tea Hub",
+  "short_name": "Crown Tea Hub",
+  "description": "Billing & expense management for Crown Tea Hub",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdf6e3",
+  "theme_color": "#2d1a0e",
+  "icons": [
+    {
+      "src": "/logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}

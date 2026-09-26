@@ -109,6 +109,21 @@ export default function Dashboard() {
               </button>
             </div>
           </ActionCard>
+          <ActionCard>
+            <div className="flex flex-col gap-3">
+              <div>
+                <h3 className="text-base font-bold" style={{ color: '#7a4e08' }}>Attendance</h3>
+                <p className="text-sm" style={{ color: '#a07020' }}>Mark daily employee attendance</p>
+              </div>
+              <button
+                onClick={() => navigate('/attendance')}
+                className="font-bold px-5 py-2.5 rounded-xl text-sm uppercase tracking-widest transition-all active:scale-95 shadow-md w-full"
+                style={{ background: 'linear-gradient(135deg, #1a5276, #2980b9, #5dade2, #2980b9, #1a5276)', color: '#fff' }}
+              >
+                Mark Attendance
+              </button>
+            </div>
+          </ActionCard>
           {user?.role === 'Admin' && (
             <ActionCard>
               <div className="flex flex-col gap-3">
@@ -136,6 +151,14 @@ export default function Dashboard() {
               <NavBtn onClick={() => navigate('/categories')} color="#7b3fa0">Manage Categories</NavBtn>
               <NavBtn onClick={() => navigate('/products')} color="#1e6fa8">Manage Products</NavBtn>
               <NavBtn onClick={() => navigate('/stock-alerts')} color="#c62828">Stock Alerts</NavBtn>
+              <NavBtn onClick={() => navigate('/attendance-report')} color="#0d6e4a">HR &amp; Salary Report</NavBtn>
+              <NavBtn onClick={() => navigate('/suppliers')} color="#7b3fa0">Manage Suppliers</NavBtn>
+              <NavBtn onClick={() => navigate('/purchase-order')} color="#b8500a">Create Purchase Order</NavBtn>
+              <NavBtn onClick={() => navigate('/receive-stock')} color="#1a6e3a">Receive Stock</NavBtn>
+              <NavBtn onClick={() => navigate('/daily-expenses')} color="#b45309">Daily Expenses</NavBtn>
+              <NavBtn onClick={() => navigate('/expense-categories')} color="#92400e">Expense Report</NavBtn>
+              <NavBtn onClick={() => navigate('/contacts')} color="#4f6d7a">Contact Book</NavBtn>
+              <NavBtn onClick={() => navigate('/sales-history')} color="#2d6a4f">Bill History</NavBtn>
             </div>
           </ActionCard>
         )}
@@ -146,6 +169,13 @@ export default function Dashboard() {
             <div className="flex flex-wrap gap-3">
               <NavBtn onClick={() => navigate('/categories')} color="#7b3fa0">View Categories</NavBtn>
               <NavBtn onClick={() => navigate('/products')} color="#1e6fa8">View Products</NavBtn>
+              <NavBtn onClick={() => navigate('/stock-alerts')} color="#c62828">Stock Alerts</NavBtn>
+              <NavBtn onClick={() => navigate('/purchase-order')} color="#b8500a">Create Purchase Order</NavBtn>
+              <NavBtn onClick={() => navigate('/receive-stock')} color="#1a6e3a">Receive Stock</NavBtn>
+              <NavBtn onClick={() => navigate('/daily-expenses')} color="#b45309">Daily Expenses</NavBtn>
+              <NavBtn onClick={() => navigate('/contacts')} color="#4f6d7a">Contact Book</NavBtn>
+              <NavBtn onClick={() => navigate('/sales-history')} color="#2d6a4f">Bill History</NavBtn>
+              <NavBtn onClick={() => navigate('/attendance')} color="#1a5276">Mark Attendance</NavBtn>
             </div>
           </ActionCard>
         )}
