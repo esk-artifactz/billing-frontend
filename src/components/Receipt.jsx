@@ -57,7 +57,7 @@ export default function Receipt({ sale, items, onClose }) {
         <div className="h-px my-2" style={{ background: `linear-gradient(90deg, transparent, ${B.gold}, transparent)` }} />
         <div className="text-center mb-3 text-xs space-y-0.5" style={{ color: '#555' }}>
           <p className="font-semibold">Invoice: {sale.invoice_number}</p>
-          <p>{new Date(sale.sale_time).toLocaleString('en-IN')}</p>
+          <p>{new Date(sale.sale_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
           <p>Cashier: {sale.cashier_username}</p>
           {sale.customer_name && (
             <p className="font-semibold mt-1" style={{ color: B.text }}>

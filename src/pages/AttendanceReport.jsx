@@ -5,6 +5,7 @@ import {
   getEmployees, createEmployee, updateEmployee,
   getAttendanceReport, markSalaryPaid, listSalaryPayments,
   giveAdvance, listAdvances,
+  updateSalaryPayment, deleteSalaryPayment, updateAdvance, deleteAdvance,
 } from '../api/client';
 
 // ─── Brand colours ────────────────────────────────────────────────────────────
@@ -42,9 +43,101 @@ function inr(n) {
 }
 
 // ─── Payments/Advances detail drawer ─────────────────────────────────────────
-function PaymentsDrawer({ empName, month, payments, advances, onClose }) {
+function PaymentsDrawer({ empName, month, payments, advances, onClose, onChanged, showToast }) {
+  const [editing, setEditing] = useState(null); // { type:'pay'|'adv', id, amount, notes, date }
+  const [busy,    setBusy]    = useState(null); // id being saved/deleted
+
   const totalPaid = payments.reduce((s, p) => s + parseFloat(p.amount_paid), 0);
   const totalAdv  = advances.reduce((s, a) => s + parseFloat(a.amount), 0);
+
+  const startEdit = (type, row) => setEditing({
+    type,
+    id:     row.id,
+    amount: type === 'pay' ? row.amount_paid : row.amount,
+    notes:  row.notes || '',
+    date:   row.given_on ? String(row.given_on).slice(0, 10) : '',
+  });
+
+  const saveEdit = async () => {
+    const amt = parseFloat(editing.amount);
+    if (isNaN(amt) || amt <= 0) { showToast('Enter a valid amount', false); return; }
+    setBusy(editing.id);
+    try {
+      if (editing.type === 'pay') {
+        await updateSalaryPayment(editing.id, { amount_paid: amt, notes: editing.notes || null });
+      } else {
+        await updateAdvance(editing.id, {
+          amount: amt, notes: editing.notes || null,
+          given_on: editing.date || undefined,
+        });
+      }
+      showToast('Updated!');
+      setEditing(null);
+      onChanged();
+    } catch (err) { showToast(err.response?.data?.detail || 'Update failed', false); }
+    finally { setBusy(null); }
+  };
+
+  const removeRow = async (type, row) => {
+    const amt = type === 'pay' ? row.amount_paid : row.amount;
+    if (!window.confirm(`Delete this ${type === 'pay' ? 'salary payment' : 'advance'} of ${inr(amt)}?`)) return;
+    setBusy(row.id);
+    try {
+      if (type === 'pay') await deleteSalaryPayment(row.id);
+      else await deleteAdvance(row.id);
+      showToast('Deleted.');
+      onChanged();
+    } catch (err) { showToast(err.response?.data?.detail || 'Delete failed', false); }
+    finally { setBusy(null); }
+  };
+
+  const editForm = (key, row) => (
+    <div key={key} className="px-3 py-2 rounded-lg space-y-2"
+      style={{ background: '#fff', border: `1px solid ${B.gold}` }}>
+      <div className="flex gap-2">
+        <input type="number" step="0.01" min="0.01" value={editing.amount}
+          onChange={e => setEditing(s => ({ ...s, amount: e.target.value }))}
+          placeholder="Amount" autoFocus
+          className="w-28 border-2 rounded-lg px-2 py-1 text-sm outline-none"
+          style={{ borderColor: B.gold }} />
+        <input type="text" value={editing.notes}
+          onChange={e => setEditing(s => ({ ...s, notes: e.target.value }))}
+          placeholder="Note (optional)"
+          className="flex-1 border-2 rounded-lg px-2 py-1 text-sm outline-none"
+          style={{ borderColor: '#e8d5a3' }} />
+      </div>
+      {editing.type === 'adv' && (
+        <input type="date" value={editing.date}
+          onChange={e => setEditing(s => ({ ...s, date: e.target.value }))}
+          className="border-2 rounded-lg px-2 py-1 text-sm outline-none"
+          style={{ borderColor: '#e8d5a3' }} />
+      )}
+      <div className="flex gap-2">
+        <button onClick={saveEdit} disabled={busy === editing.id}
+          className="text-xs font-bold px-3 py-1 rounded-lg disabled:opacity-50"
+          style={{ background: '#dcfce7', color: '#16a34a' }}>
+          {busy === editing.id ? 'Saving…' : 'Save'}
+        </button>
+        <button onClick={() => setEditing(null)}
+          className="text-xs font-bold px-3 py-1 rounded-lg"
+          style={{ background: '#f3f4f6', color: '#6b7280' }}>Cancel</button>
+      </div>
+    </div>
+  );
+
+  const actionBtns = (type, row) => (
+    <span className="flex gap-1 ml-2 flex-shrink-0">
+      <button onClick={() => startEdit(type, row)} disabled={busy === row.id}
+        className="text-xs font-bold px-2 py-0.5 rounded-lg disabled:opacity-40"
+        style={{ background: '#dbeafe', color: '#1d4ed8' }}>Edit</button>
+      <button onClick={() => removeRow(type, row)} disabled={busy === row.id}
+        className="text-xs font-bold px-2 py-0.5 rounded-lg disabled:opacity-40"
+        style={{ background: '#fee2e2', color: '#dc2626' }}>
+        {busy === row.id ? '…' : 'Del'}
+      </button>
+    </span>
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: 'rgba(45,26,14,0.6)' }}>
@@ -68,12 +161,17 @@ function PaymentsDrawer({ empName, month, payments, advances, onClose }) {
               <p className="text-sm text-gray-400 italic">No advances this month</p>
             ) : (
               <div className="space-y-1">
-                {advances.map((a, i) => (
-                  <div key={i} className="flex justify-between items-center px-3 py-2 rounded-lg text-sm"
-                    style={{ background: '#ede9fe' }}>
-                    <span style={{ color: '#5b21b6' }}>{a.given_on?.slice(0,10)} — {a.notes || 'Advance'}</span>
-                    <span className="font-bold" style={{ color: '#7c3aed' }}>{inr(a.amount)}</span>
-                  </div>
+                {advances.map((a) => (
+                  editing?.type === 'adv' && editing.id === a.id ? editForm(`adv-${a.id}`, a) : (
+                    <div key={a.id} className="flex justify-between items-center px-3 py-2 rounded-lg text-sm"
+                      style={{ background: '#ede9fe' }}>
+                      <span style={{ color: '#5b21b6' }}>{a.given_on?.slice(0,10)} — {a.notes || 'Advance'}</span>
+                      <span className="flex items-center">
+                        <span className="font-bold" style={{ color: '#7c3aed' }}>{inr(a.amount)}</span>
+                        {actionBtns('adv', a)}
+                      </span>
+                    </div>
+                  )
                 ))}
               </div>
             )}
@@ -87,15 +185,25 @@ function PaymentsDrawer({ empName, month, payments, advances, onClose }) {
               <p className="text-sm text-gray-400 italic">No salary payments this month</p>
             ) : (
               <div className="space-y-1">
-                {payments.map((p, i) => (
-                  <div key={i} className="flex justify-between items-center px-3 py-2 rounded-lg text-sm"
-                    style={{ background: '#dcfce7' }}>
-                    <span style={{ color: '#166534' }}>
-                      {p.paid_at?.slice(0,10)} — {p.notes || p.payment_type}
-                    </span>
-                    <span className="font-bold" style={{ color: '#16a34a' }}>{inr(p.amount_paid)}</span>
-                  </div>
-                ))}
+                {payments.map((p) => {
+                  const fromExpense = p.source === 'daily_expense';
+                  return editing?.type === 'pay' && editing.id === p.id ? editForm(`pay-${p.id}`, p) : (
+                    <div key={p.id} className="flex justify-between items-center px-3 py-2 rounded-lg text-sm"
+                      style={{ background: '#dcfce7' }}>
+                      <span style={{ color: '#166534' }}>
+                        {p.paid_at ? new Date(p.paid_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) : ''} — {p.notes || p.payment_type}
+                        {fromExpense && (
+                          <span className="ml-1 text-xs font-bold px-1.5 py-0.5 rounded"
+                            style={{ background: '#fef3c7', color: '#b45309' }}>via Expenses</span>
+                        )}
+                      </span>
+                      <span className="flex items-center">
+                        <span className="font-bold" style={{ color: '#16a34a' }}>{inr(p.amount_paid)}</span>
+                        {!fromExpense && actionBtns('pay', p)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -238,16 +346,21 @@ export default function AttendanceReport() {
   };
 
   // ── History drawer ────────────────────────────────────────────────────────
-  const openDrawer = async (row) => {
-    setDrawer({ empName: row.full_name, empId: row.employee_id });
+  const refreshDrawer = async (empId = drawer?.empId) => {
+    if (!empId) return;
     try {
       const [p, a] = await Promise.all([
-        listSalaryPayments(row.employee_id, month),
-        listAdvances(row.employee_id, month),
+        listSalaryPayments(empId, month),
+        listAdvances(empId, month),
       ]);
       setDrawerPayments(p.data.payments || []);
       setDrawerAdvances(a.data.advances || []);
     } catch { setDrawerPayments([]); setDrawerAdvances([]); }
+  };
+
+  const openDrawer = (row) => {
+    setDrawer({ empName: row.full_name, empId: row.employee_id });
+    refreshDrawer(row.employee_id);
   };
 
   // ── Totals ────────────────────────────────────────────────────────────────
@@ -378,7 +491,7 @@ export default function AttendanceReport() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ background: `linear-gradient(90deg, ${B.darkBrown}, ${B.midBrown})` }}>
-                        {['Employee', 'Daily Rate', 'P', 'A', 'H', 'L', 'Eff. Days', 'Gross', 'Advances', 'Paid', 'Balance', 'Actions'].map(h => (
+                        {['Employee', 'Daily Rate', 'P', 'H', 'L', 'Eff. Days', 'Gross', 'Advances', 'Paid', 'Balance', 'Actions'].map(h => (
                           <th key={h} className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
                             style={{ color: B.goldLight }}>{h}</th>
                         ))}
@@ -397,9 +510,6 @@ export default function AttendanceReport() {
                           </td>
                           <td className="px-3 py-3">
                             <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: STATUS_META.present.bg, color: STATUS_META.present.color }}>{row.present_days}</span>
-                          </td>
-                          <td className="px-3 py-3">
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: STATUS_META.absent.bg, color: STATUS_META.absent.color }}>{row.absent_days}</span>
                           </td>
                           <td className="px-3 py-3">
                             <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: STATUS_META.half_day.bg, color: STATUS_META.half_day.color }}>{row.half_days}</span>
@@ -699,6 +809,8 @@ export default function AttendanceReport() {
           payments={drawerPayments}
           advances={drawerAdvances}
           onClose={() => setDrawer(null)}
+          showToast={showToast}
+          onChanged={() => { refreshDrawer(); loadReport(month); }}
         />
       )}
     </div>

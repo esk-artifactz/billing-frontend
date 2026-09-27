@@ -17,7 +17,7 @@ const PM_STYLE = {
 };
 
 const fmtINR = (n) => `₹${parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // IST
 
 export default function SalesHistory() {
   const { user, signOut } = useAuth();
@@ -210,6 +210,7 @@ export default function SalesHistory() {
                         </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: B.textLight }}>
                           {new Date(s.sale_time).toLocaleString('en-IN', {
+                            timeZone: 'Asia/Kolkata',
                             day: '2-digit', month: 'short',
                             hour: '2-digit', minute: '2-digit', hour12: true,
                           })}

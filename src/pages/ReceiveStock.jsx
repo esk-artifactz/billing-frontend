@@ -252,7 +252,7 @@ export default function ReceiveStock() {
                         </td>
                         <td className="px-4 py-3">{statusBadge(po.status)}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: '#7a4e08' }}>
-                          {po.created_at ? new Date(po.created_at).toLocaleDateString('en-IN') : '—'}
+                          {po.created_at ? new Date(po.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—'}
                           <div className="text-gray-400">{po.created_by}</div>
                         </td>
                         <td className="px-4 py-3">

@@ -16,7 +16,6 @@ const B = {
 
 const STATUS_OPTIONS = [
   { value: 'present',  label: 'Present',   color: '#16a34a', bg: '#dcfce7' },
-  { value: 'absent',   label: 'Absent',    color: '#dc2626', bg: '#fee2e2' },
   { value: 'half_day', label: 'Half Day',  color: '#d97706', bg: '#fef3c7' },
   { value: 'leave',    label: 'Leave',     color: '#7c3aed', bg: '#ede9fe' },
 ];
@@ -26,7 +25,8 @@ function statusMeta(val) {
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  // IST business date — en-CA locale formats as YYYY-MM-DD
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 }
 
 export default function Attendance() {
@@ -66,17 +66,27 @@ export default function Attendance() {
 
   useEffect(() => { loadData(selectedDate); }, [selectedDate, loadData]);
 
-  // Merge employees with their attendance status for the selected date
-  const rows = employees.filter(e => e.active !== false).map(emp => {
-    const att = attendance.find(a => a.employee_id === emp.id);
-    return {
-      ...emp,
-      att_id:   att?.att_id   || null,
-      status:   att?.status   || null,
-      notes:    att?.notes    || '',
-      marked_by: att?.marked_by || null,
-    };
-  });
+  // Merge employees with their attendance status for the selected date.
+  // Only show employees whose join_date is on or before the selected date —
+  // someone can't be marked present before they joined.
+  const rows = employees
+    .filter(e => e.active !== false)
+    .filter(e => {
+      if (!e.join_date) return true;
+      const jd = new Date(e.join_date);
+      return isNaN(jd) || jd <= new Date(selectedDate + 'T23:59:59');
+    })
+    .sort((a, b) => new Date(a.join_date || 0) - new Date(b.join_date || 0))
+    .map(emp => {
+      const att = attendance.find(a => a.employee_id === emp.id);
+      return {
+        ...emp,
+        att_id:   att?.att_id   || null,
+        status:   att?.status   || null,
+        notes:    att?.notes    || '',
+        marked_by: att?.marked_by || null,
+      };
+    });
 
   const handleMark = async (empId, status) => {
     setSaving(s => ({ ...s, [empId]: true }));
@@ -207,7 +217,14 @@ export default function Attendance() {
                       <tr key={emp.id}
                         style={{ background: idx % 2 === 0 ? '#fff' : '#fffbf2', borderBottom: '1px solid #f0e0c0' }}>
                         <td className="px-4 py-3 font-mono font-semibold text-xs" style={{ color: B.brown }}>{emp.emp_code}</td>
-                        <td className="px-4 py-3 font-semibold" style={{ color: B.darkBrown }}>{emp.full_name}</td>
+                        <td className="px-4 py-3 font-semibold" style={{ color: B.darkBrown }}>
+                          {emp.full_name}
+                          {emp.join_date && (
+                            <span className="block text-xs font-normal" style={{ color: '#a07020' }}>
+                              Joined {new Date(emp.join_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-xs" style={{ color: '#7a4e08' }}>{emp.role}</td>
                         <td className="px-4 py-3">
                           {meta ? (

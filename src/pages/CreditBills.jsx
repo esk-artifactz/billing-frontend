@@ -315,7 +315,7 @@ export default function CreditBills() {
                           <p className="font-bold" style={{ color: B.text }}>{bill.customer_name}</p>
                           <p className="text-sm" style={{ color: B.textLight }}>📱 {bill.customer_mobile}</p>
                           <p className="text-xs mt-0.5" style={{ color: '#aaa' }}>
-                            {bill.invoice_number} · {new Date(bill.bill_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            {bill.invoice_number} · {new Date(bill.bill_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
                           </p>
                         </div>
                       </div>

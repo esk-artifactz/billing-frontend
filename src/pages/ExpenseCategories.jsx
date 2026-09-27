@@ -16,8 +16,8 @@ const PM_STYLE = {
 };
 
 const fmtINR = (n) => `₹${parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const isoToday = () => new Date().toISOString().slice(0, 10);
-const firstOfMonth = () => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+const isoToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // IST
+const firstOfMonth = () => isoToday().slice(0, 8) + '01';
 
 export default function ExpenseCategories() {
   const { user, signOut } = useAuth();
@@ -162,7 +162,7 @@ export default function ExpenseCategories() {
                 { label: 'This Month', fn: () => { setDateFrom(firstOfMonth()); setDateTo(isoToday()); } },
                 { label: 'Last 7d',    fn: () => {
                   const d = new Date(); d.setDate(d.getDate() - 6);
-                  setDateFrom(d.toISOString().slice(0,10)); setDateTo(isoToday());
+                  setDateFrom(d.toLocaleDateString('en-CA')); setDateTo(isoToday());
                 }},
               ].map(q => (
                 <button key={q.label} onClick={q.fn}

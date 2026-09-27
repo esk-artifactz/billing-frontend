@@ -23,7 +23,7 @@ const fmt  = (n) => parseFloat(n || 0).toFixed(2);
 const fmtN = (n) => parseFloat(n || 0).toLocaleString('en-IN');
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
-function toISO(d) { return d.toISOString().slice(0, 10); }   // YYYY-MM-DD
+function toISO(d) { return d.toLocaleDateString('en-CA'); }   // YYYY-MM-DD, local
 
 function getPresetRange(preset) {
   const today = new Date();

@@ -226,7 +226,7 @@ function HeldBillsModal({ onClose, onRetrieve }) {
               <div className="flex-1">
                 <p className="font-bold" style={{ color: B.text }}>{h.hold_reference}</p>
                 <p className="text-xs" style={{ color: B.textLight }}>Cashier: {h.cashier_username}</p>
-                <p className="text-xs" style={{ color: '#aaa' }}>{new Date(h.created_at).toLocaleString('en-IN')}</p>
+                <p className="text-xs" style={{ color: '#aaa' }}>{new Date(h.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
               </div>
               <div className="text-right">
                 <p className="font-bold" style={{ color: B.goldDark }}>₹{fmt(h.grand_total)}</p>

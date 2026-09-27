@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getDailyExpenses, createDailyExpense, updateDailyExpense, deleteDailyExpense,
   getExpenseCategories, createExpenseCategory, updateExpenseCategory, deleteExpenseCategory,
-  getQueuedByUrl } from '../api/client';
+  getQueuedByUrl, getEmployees } from '../api/client';
 import OfflineBanner from '../components/OfflineBanner';
 
 const B = {
@@ -19,12 +19,16 @@ const PM_STYLE = {
   upi:  { bg: '#ede9fe', color: '#7c3aed', label: 'UPI' },
 };
 const fmtINR = (n) => `₹${parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const today  = () => new Date().toISOString().slice(0, 10);
+const today  = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // IST
 
 const EMPTY_FORM = {
   expense_date: today(), category: '', description: '', amount: '',
-  payment_mode: 'cash', paid_to: '', notes: '', supplier_id: '',
+  payment_mode: 'cash', paid_to: '', notes: '', supplier_id: '', employee_id: '',
+  is_paid: true,
 };
+
+// Categories that represent staff salary/wage payouts
+const SALARY_CAT = /salary|\bsal\b|wage|staff|labou?r|payroll/i;
 
 const EMPTY_CAT_FORM = { name: '', description: '', color: '#d4a017', sort_order: 0 };
 
@@ -45,6 +49,11 @@ export default function DailyExpenses() {
   const [categories,  setCategories]  = useState([]);
   const [catObjs,     setCatObjs]     = useState([]); // full objects from /expense-categories
   const [suppliers,   setSuppliers]   = useState([]);
+  const [employees,   setEmployees]   = useState([]);
+  const [advances,    setAdvances]    = useState([]);
+  const [advTotal,    setAdvTotal]    = useState(0);
+  const [payouts,     setPayouts]     = useState([]);
+  const [payTotal,    setPayTotal]    = useState(0);
   const [loading,     setLoading]     = useState(true);
   const [total,       setTotal]       = useState(0);
 
@@ -80,6 +89,10 @@ export default function DailyExpenses() {
       setTotal(res.data.total || 0);
       setCategories(res.data.categories || []);
       setSuppliers(res.data.suppliers || []);
+      setAdvances(res.data.advances || []);
+      setAdvTotal(res.data.advance_total || 0);
+      setPayouts(res.data.payouts || []);
+      setPayTotal(res.data.payout_total || 0);
       // Also load full category objects for Manage tab
       const catRes = await getExpenseCategories();
       setCatObjs(catRes.data.categories || []);
@@ -95,6 +108,10 @@ export default function DailyExpenses() {
   }, [filterDate, filterMode, navigate, signOut]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    getEmployees().then(res => setEmployees((res.data.employees || []).filter(e => e.active !== false)))
+      .catch(() => {});
+  }, []);
 
   const openAdd = () => {
     setForm({ ...EMPTY_FORM, expense_date: filterDate || today() });
@@ -106,6 +123,8 @@ export default function DailyExpenses() {
       category: e.category, description: e.description,
       amount: e.amount, payment_mode: e.payment_mode,
       paid_to: e.paid_to || '', notes: e.notes || '', supplier_id: '',
+      employee_id: e.employee_id || '',
+      is_paid: e.is_paid !== false,
     });
     setEditId(e.id); setFormErr(''); setModal('edit');
   };
@@ -129,6 +148,16 @@ export default function DailyExpenses() {
       if (name === 'category' && value !== 'Supplier Payment') {
         updated.supplier_id = '';
       }
+      // Employee picked → auto-fill Paid To + Description for salary entries
+      if (name === 'employee_id') {
+        const emp = employees.find(e => String(e.id) === String(value));
+        if (emp) {
+          updated.paid_to = emp.full_name;
+          if (!f.description) updated.description = `Salary — ${emp.full_name}`;
+        } else {
+          updated.paid_to = '';
+        }
+      }
       return updated;
     });
   };
@@ -138,6 +167,10 @@ export default function DailyExpenses() {
     if (!form.category)    { setFormErr('Select a category.'); return; }
     if (!form.description) { setFormErr('Description is required.'); return; }
     if (!form.amount || parseFloat(form.amount) <= 0) { setFormErr('Enter a valid amount.'); return; }
+    if (SALARY_CAT.test(form.category) && !form.employee_id) {
+      setFormErr('Pick the employee this salary/wage payment is for.');
+      return;
+    }
     setSaving(true); setFormErr('');
     try {
       if (modal === 'add') {
@@ -152,6 +185,13 @@ export default function DailyExpenses() {
       closeModal(); load();
     } catch (err) { setFormErr(err.response?.data?.detail || 'Failed to save.'); }
     finally { setSaving(false); }
+  };
+
+  const togglePaid = async (e) => {
+    try {
+      await updateDailyExpense(e.id, { is_paid: e.is_paid === false });
+      load();
+    } catch { showToast('Failed to update status.', false); }
   };
 
   const handleDelete = async (e) => {
@@ -192,15 +232,30 @@ export default function DailyExpenses() {
     catch { showToast('Failed.', false); }
   };
 
+  // Advances & salary payouts are cash payments — hide when filtering bank/upi
+  const showAdvances = filterMode === 'all' || filterMode === 'cash';
+  const advShownTotal = showAdvances ? advTotal : 0;
+  const payShownTotal = showAdvances ? payTotal : 0;
+
+  // Amount still owed (unpaid expense rows)
+  const unpaidTotal = expenses.reduce(
+    (s, e) => s + (e.is_paid === false ? parseFloat(e.amount || 0) : 0), 0);
+
   // Summaries
   const byMode = expenses.reduce((acc, e) => {
     acc[e.payment_mode] = (acc[e.payment_mode] || 0) + parseFloat(e.amount || 0);
     return acc;
   }, {});
-  const byCategory = expenses.reduce((acc, e) => {
-    acc[e.category] = (acc[e.category] || 0) + parseFloat(e.amount || 0);
-    return acc;
-  }, {});
+  if (showAdvances) byMode.cash = (byMode.cash || 0) + advTotal + payTotal;
+  const byCategory = [...expenses,
+    ...(showAdvances ? [
+      ...advances.map(a => ({ category: 'Salary Advance', amount: a.amount })),
+      ...payouts.map(p  => ({ category: 'Salary Paid',    amount: p.amount  })),
+    ] : [])]
+    .reduce((acc, e) => {
+      acc[e.category] = (acc[e.category] || 0) + parseFloat(e.amount || 0);
+      return acc;
+    }, {});
 
   return (
     <div className="min-h-screen" style={{ background: `linear-gradient(160deg, ${B.cream} 0%, ${B.creamMid} 60%, #ede0c4 100%)` }}>
@@ -315,11 +370,16 @@ export default function DailyExpenses() {
         </div>
 
         {/* Summary cards */}
-        {!loading && expenses.length > 0 && (
+        {!loading && (expenses.length > 0 || (showAdvances && (advances.length > 0 || payouts.length > 0))) && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="rounded-2xl p-4 shadow-sm" style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
               <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: B.textLight }}>Total Spent</p>
-              <p className="text-2xl font-extrabold" style={{ color: B.brown }}>{fmtINR(total)}</p>
+              <p className="text-2xl font-extrabold" style={{ color: B.brown }}>{fmtINR(total + advShownTotal + payShownTotal)}</p>
+              {unpaidTotal > 0 && (
+                <p className="text-xs font-bold mt-1" style={{ color: '#dc2626' }}>
+                  incl. {fmtINR(unpaidTotal)} unpaid
+                </p>
+              )}
             </div>
             {Object.entries(PM_STYLE).map(([mode, s]) => (
               <div key={mode} className="rounded-2xl p-4 shadow-sm"
@@ -361,7 +421,7 @@ export default function DailyExpenses() {
               <div className="w-10 h-10 rounded-full border-4 animate-spin"
                 style={{ borderColor: B.gold, borderTopColor: 'transparent' }} />
             </div>
-          ) : expenses.length === 0 && pendingExp.length === 0 ? (
+          ) : expenses.length === 0 && pendingExp.length === 0 && !(showAdvances && (advances.length > 0 || payouts.length > 0)) ? (
             <div className="text-center py-16">
               <p className="text-lg font-semibold" style={{ color: B.textLight }}>No expenses for this date</p>
               <p className="text-sm mt-1" style={{ color: '#bbb' }}>Click "+ Add Expense" to record a spend.</p>
@@ -371,7 +431,7 @@ export default function DailyExpenses() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
-                    {['Date', 'Category', 'Description', 'Paid To', 'Amount', 'Mode', 'Recorded By', 'Actions'].map(h => (
+                    {['Date', 'Category', 'Description', 'Paid To', 'Amount', 'Mode', 'Status', 'Recorded By', 'Actions'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
                         style={{ color: B.goldLight }}>{h}</th>
                     ))}
@@ -409,6 +469,7 @@ export default function DailyExpenses() {
                             {pm.label}
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-xs" style={{ color: '#bbb' }}>—</td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                             style={{ background: '#fef3c7', color: '#b45309' }}>
@@ -419,6 +480,86 @@ export default function DailyExpenses() {
                       </tr>
                     );
                   })}
+                  {/* Salary advances — read-only rows, managed in HR */}
+                  {showAdvances && advances.map(a => (
+                    <tr key={`adv-${a.id}`}
+                      style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0' }}>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: B.textLight }}>
+                        {String(a.expense_date).slice(0, 10)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#166534' }}>
+                          Salary Advance
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-semibold max-w-[200px]" style={{ color: B.darkBrown }}>
+                        <div className="truncate">Advance — {a.full_name}</div>
+                        {a.notes && <div className="text-xs text-gray-400 truncate" title={a.notes}>{a.notes}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{a.full_name}</td>
+                      <td className="px-4 py-3 font-extrabold whitespace-nowrap" style={{ color: B.brown }}>
+                        {fmtINR(a.amount)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full uppercase"
+                          style={{ background: PM_STYLE.cash.bg, color: PM_STYLE.cash.color }}>
+                          Cash
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: '#dcfce7', color: '#16a34a' }}>Paid</span>
+                      </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{a.recorded_by || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: '#e0f2fe', color: '#0369a1' }}>
+                          via HR
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {/* Salary payouts (HR "Pay") — read-only rows, managed in HR */}
+                  {showAdvances && payouts.map(p => (
+                    <tr key={`pay-${p.id}`}
+                      style={{ background: '#eff6ff', borderBottom: '1px solid #bfdbfe' }}>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: B.textLight }}>
+                        {p.paid_at ? new Date(p.paid_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: '#dbeafe', border: '1px solid #93c5fd', color: '#1d4ed8' }}>
+                          Salary Paid
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-semibold max-w-[200px]" style={{ color: B.darkBrown }}>
+                        <div className="truncate">Salary payout — {p.full_name}{p.pay_month ? ` (${p.pay_month})` : ''}</div>
+                        {p.notes && <div className="text-xs text-gray-400 truncate" title={p.notes}>{p.notes}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{p.full_name}</td>
+                      <td className="px-4 py-3 font-extrabold whitespace-nowrap" style={{ color: B.brown }}>
+                        {fmtINR(p.amount)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full uppercase"
+                          style={{ background: PM_STYLE.cash.bg, color: PM_STYLE.cash.color }}>
+                          Cash
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: '#dcfce7', color: '#16a34a' }}>Paid</span>
+                      </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{p.recorded_by || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: '#e0f2fe', color: '#0369a1' }}>
+                          via HR
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
                   {expenses.map((e, idx) => {
                     const pm = PM_STYLE[e.payment_mode] || PM_STYLE.cash;
                     return (
@@ -447,9 +588,27 @@ export default function DailyExpenses() {
                             {pm.label}
                           </span>
                         </td>
+                        <td className="px-4 py-3">
+                          {e.is_paid === false ? (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                              style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}>
+                              Unpaid
+                            </span>
+                          ) : (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                              style={{ background: '#dcfce7', color: '#16a34a' }}>Paid</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{e.recorded_by || '—'}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
+                            <button onClick={() => togglePaid(e)}
+                              title={e.is_paid === false ? 'Mark as paid' : 'Mark as unpaid'}
+                              className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                              style={{ background: e.is_paid === false ? '#dcfce7' : '#fef3c7',
+                                       color:      e.is_paid === false ? '#16a34a' : '#b45309' }}>
+                              {e.is_paid === false ? '✓ Paid' : 'Unpaid'}
+                            </button>
                             <button onClick={() => openEdit(e)}
                               className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
                               style={{ background: '#dbeafe', color: '#1d4ed8' }}>
@@ -471,8 +630,8 @@ export default function DailyExpenses() {
                     <td colSpan={4} className="px-4 py-3 text-sm font-bold text-right" style={{ color: B.text }}>
                       Day Total:
                     </td>
-                    <td className="px-4 py-3 font-extrabold text-lg" style={{ color: B.brown }}>{fmtINR(total)}</td>
-                    <td colSpan={3} />
+                    <td className="px-4 py-3 font-extrabold text-lg" style={{ color: B.brown }}>{fmtINR(total + advShownTotal + payShownTotal)}</td>
+                    <td colSpan={4} />
                   </tr>
                 </tfoot>
               </table>
@@ -628,6 +787,40 @@ export default function DailyExpenses() {
                   </div>
                 )}
 
+                {/* Employee picker — always available; required for salary-type
+                    categories so the payment lands in the HR salary report */}
+                {(() => {
+                  const isSal = SALARY_CAT.test(form.category);
+                  return (
+                    <div className="rounded-xl p-3 border"
+                      style={{ background: isSal ? '#f0fdf4' : '#fafafa',
+                               borderColor: isSal ? '#16a34a' : '#e8d5a3' }}>
+                      <label className="text-xs font-bold mb-1 block"
+                        style={{ color: isSal ? '#166534' : B.brown }}>
+                        Link to Employee {isSal && '*'}
+                        <span className="ml-1 font-normal text-gray-400">
+                          (counts toward their salary in HR report)
+                        </span>
+                      </label>
+                      <select name="employee_id" value={form.employee_id} onChange={handleChange}
+                        className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none"
+                        style={{ borderColor: isSal ? '#16a34a' : '#e8d5a3' }}>
+                        <option value="">— None —</option>
+                        {employees.map(emp => (
+                          <option key={emp.id} value={emp.id}>
+                            {emp.full_name}{emp.role ? ` · ${emp.role}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {employees.length === 0 && (
+                        <p className="text-xs mt-1 text-gray-400">
+                          No employees found. Add them in HR / Employees first.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div>
                   <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>Description *</label>
                   <input type="text" name="description" value={form.description} onChange={handleChange}
@@ -665,6 +858,16 @@ export default function DailyExpenses() {
                     className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none resize-none"
                     style={{ borderColor: '#e8d5a3' }} placeholder="Optional details…" />
                 </div>
+                <label className="flex items-center gap-2.5 cursor-pointer select-none rounded-xl p-3 border"
+                  style={{ background: form.is_paid ? '#f0fdf4' : '#fef2f2',
+                           borderColor: form.is_paid ? '#bbf7d0' : '#fecaca' }}>
+                  <input type="checkbox" name="is_paid" checked={form.is_paid}
+                    onChange={e => setForm(f => ({ ...f, is_paid: e.target.checked }))}
+                    className="w-4 h-4 accent-green-600" />
+                  <span className="text-sm font-bold" style={{ color: form.is_paid ? '#166534' : '#dc2626' }}>
+                    {form.is_paid ? 'Paid' : 'Unpaid — amount still owed'}
+                  </span>
+                </label>
                 <div className="flex gap-3 pt-1">
                   <button type="button" onClick={closeModal}
                     className="flex-1 py-2.5 rounded-xl text-sm font-semibold"

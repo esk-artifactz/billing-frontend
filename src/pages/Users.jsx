@@ -217,7 +217,7 @@ export default function Users() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: B.textLight }}>
-                          {u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          {u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                         </td>
                         <td className="px-4 py-3">
                           <button onClick={() => openEdit(u)}

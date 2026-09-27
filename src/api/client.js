@@ -148,11 +148,15 @@ export const getAttendanceReport = (month) => api.get('/attendance/report', { pa
 
 export const markSalaryPaid      = (data)                  => api.post('/salary/pay', data);
 export const listSalaryPayments  = (employee_id, month)    => api.get('/salary/payments', { params: { employee_id, month } });
+export const updateSalaryPayment = (id, data)              => api.put(`/salary/payments/${id}`, data);
+export const deleteSalaryPayment = (id)                    => api.delete(`/salary/payments/${id}`);
 
 // ── Advances ──────────────────────────────────────────────────────────────────
 
 export const giveAdvance   = (data)                        => api.post('/advances', data);
 export const listAdvances  = (employee_id, month)          => api.get('/advances', { params: { employee_id, month } });
+export const updateAdvance = (id, data)                    => api.put(`/advances/${id}`, data);
+export const deleteAdvance = (id)                          => api.delete(`/advances/${id}`);
 
 // ── Suppliers ─────────────────────────────────────────────────────────────────
 

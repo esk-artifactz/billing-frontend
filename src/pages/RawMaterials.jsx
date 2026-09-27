@@ -21,7 +21,7 @@ const USED_FOR_OPTIONS = [
   'Tea', 'Bonda', 'Bajji', 'Sandwich', 'Juice', 'Snacks', 'Sweets', 'Other',
 ];
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // IST
 const fmtN  = (n, dec = 3) => parseFloat(n || 0).toLocaleString('en-IN', { maximumFractionDigits: dec });
 
 const EMPTY_ITEM = { name: '', unit: 'kg', category: '' };

@@ -308,7 +308,7 @@ export default function StockAlerts() {
                     {/* Print header */}
                     <div className="hidden print-only text-center mb-4">
                       <p className="text-lg font-extrabold">Crown Tea Hub — Expiry Alert List</p>
-                      <p className="text-sm">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                      <p className="text-sm">{new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}</p>
                       <hr className="my-2" />
                     </div>
 
@@ -457,7 +457,7 @@ export default function StockAlerts() {
                   {/* Print header (only visible when printing) */}
                   <div className="hidden print-only text-center mb-4">
                     <p className="text-lg font-extrabold">Crown Tea Hub — Order List</p>
-                    <p className="text-sm">{tab === 'out' ? 'Out of Stock Items' : 'Low Stock Items'} · {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                    <p className="text-sm">{tab === 'out' ? 'Out of Stock Items' : 'Low Stock Items'} · {new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}</p>
                     <hr className="my-2" />
                   </div>
 
