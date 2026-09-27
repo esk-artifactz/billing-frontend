@@ -109,10 +109,10 @@ export default function Products() {
       name: p.name || '', barcode: p.barcode || '', brand: p.brand || '',
       category_id: p.category_id || '', subcategory: p.subcategory || '',
       unit: p.unit || 'pcs',
-      purchase_price: p.purchase_price || '', mrp: p.mrp || '',
-      selling_price: p.selling_price || '', gst_percentage: p.gst_percentage || '',
+      purchase_price: p.purchase_price ?? '', mrp: p.mrp ?? '',
+      selling_price: p.selling_price ?? '', gst_percentage: p.gst_percentage ?? '',
       track_stock: p.track_stock !== undefined ? p.track_stock : true,
-      current_stock: p.current_stock || '', minimum_stock_level: p.minimum_stock_level || '',
+      current_stock: p.current_stock ?? '', minimum_stock_level: p.minimum_stock_level ?? '',
       quick_sale_enabled: p.quick_sale_enabled || false,
       active: p.active !== undefined ? p.active : true,
       supplier_id: p.supplier_id || '',
@@ -149,8 +149,8 @@ export default function Products() {
     mrp: parseFloat(form.mrp) || 0,
     selling_price: parseFloat(form.selling_price) || 0,
     gst_percentage: parseFloat(form.gst_percentage) || 0,
-    current_stock: form.track_stock ? (parseFloat(form.current_stock) || 0) : null,
-    minimum_stock_level: form.track_stock ? (parseFloat(form.minimum_stock_level) || 0) : null,
+    current_stock: form.track_stock ? (parseFloat(form.current_stock) || 0) : 0,
+    minimum_stock_level: form.track_stock ? (parseFloat(form.minimum_stock_level) || 0) : 0,
     supplier_id: form.supplier_id || null,
     mfg_date: form.mfg_date || null,
     expiry_date: form.expiry_date || null,
@@ -465,7 +465,12 @@ export default function Products() {
                 <div className="space-y-4">
                   <div className="flex flex-wrap gap-6">
                     <Toggle checked={form.track_stock} label="Track Stock"
-                      onChange={() => setForm(f => ({ ...f, track_stock: !f.track_stock }))} />
+                      onChange={() => setForm(f => ({
+                        ...f,
+                        track_stock: !f.track_stock,
+                        // Turning tracking off → reset stock fields to 0
+                        ...(f.track_stock ? { current_stock: '0', minimum_stock_level: '0' } : {}),
+                      }))} />
                     <Toggle checked={form.quick_sale_enabled} label="Quick Sale"
                       onChange={() => setForm(f => ({ ...f, quick_sale_enabled: !f.quick_sale_enabled }))} />
                     <Toggle checked={form.active} label="Active"

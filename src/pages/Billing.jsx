@@ -254,7 +254,7 @@ function HeldBillsModal({ onClose, onRetrieve }) {
 
 // ─── Cart Panel ───────────────────────────────────────────────────────────────
 
-function CartPanel({ cart, updateQuantity, removeFromCart, onCheckout, onHold, onShowHeld, subtotal, gstTotal, grandTotal }) {
+function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onCheckout, onHold, onShowHeld, subtotal, gstTotal, grandTotal }) {
   return (
     <div className="flex flex-col h-full" style={{ background: B.cream }}>
       {/* Header */}
@@ -294,7 +294,21 @@ function CartPanel({ cart, updateQuantity, removeFromCart, onCheckout, onHold, o
                 <button onClick={() => updateQuantity(item.id, -1)}
                   className="w-8 h-8 rounded-full font-bold flex items-center justify-center transition-all active:scale-90"
                   style={{ background: '#e8d5a3', color: B.brown }}>−</button>
-                <span className="w-8 text-center font-bold text-sm" style={{ color: B.text }}>{item.quantity}</span>
+                <input
+                  key={`${item.id}-${item.quantity}`}
+                  type="number" inputMode="decimal" min="0" step="any"
+                  defaultValue={item.quantity}
+                  onKeyDown={e => e.key === 'Enter' && e.target.blur()}
+                  onBlur={e => {
+                    const v = parseFloat(e.target.value);
+                    if (!isNaN(v) && v > 0) setQuantity(item.id, v);
+                    else if (v === 0) removeFromCart(item.id);
+                    else e.target.value = item.quantity;   // invalid → revert
+                  }}
+                  title="Click to type quantity"
+                  className="w-12 text-center font-bold text-sm rounded-lg outline-none"
+                  style={{ color: B.text, background: '#fff', border: `1px solid #e8d5a3` }}
+                />
                 <button onClick={() => updateQuantity(item.id, 1)}
                   className="w-8 h-8 rounded-full font-bold flex items-center justify-center transition-all active:scale-90"
                   style={{ background: B.goldGrad, color: B.brown }}>+</button>
@@ -407,6 +421,14 @@ export default function Billing() {
     );
   };
 
+  // Manual quantity entry — typing 0 removes the item, invalid input is ignored
+  const setQuantity = (productId, qty) => {
+    setCart(prev =>
+      prev.map(i => i.id === productId ? { ...i, quantity: qty } : i)
+          .filter(i => i.quantity > 0)
+    );
+  };
+
   const removeFromCart = (productId) => setCart(prev => prev.filter(i => i.id !== productId));
 
   // Camera scan result → add matching product, return status message for the modal
@@ -484,7 +506,7 @@ export default function Billing() {
   };
 
   const cartProps = {
-    cart, updateQuantity, removeFromCart,
+    cart, updateQuantity, setQuantity, removeFromCart,
     onCheckout: () => { setShowMobileCart(false); setShowCheckout(true); },
     onHold: handleHold,
     onShowHeld: () => { setShowMobileCart(false); setShowHeld(true); },

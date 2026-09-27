@@ -99,6 +99,9 @@ export const checkout = (data) =>
 
 export const getReceipt = (invoiceNumber) => api.get(`/billing/receipt/${invoiceNumber}`);
 
+// Public menu card — no auth needed
+export const getMenu = () => api.get('/menu');
+
 export const holdSale = (data) => api.post('/billing/hold', data);
 
 export const getHeldSales = () => api.get('/billing/held');
