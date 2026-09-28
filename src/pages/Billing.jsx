@@ -59,6 +59,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [amountTendered, setAmountTendered] = useState('');
   const [discount, setDiscount]             = useState('');
+  const [showDiscount, setShowDiscount]     = useState(false);
   const [customerName, setCustomerName]     = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
   const [loading, setLoading] = useState(false);
@@ -120,12 +121,20 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
           </div>
         </div>
 
-        {/* Discount */}
-        <div>
-          <label className="block text-sm font-semibold mb-1.5" style={{ color: B.text }}>Discount (₹)</label>
-          <input type="number" value={discount} onChange={e => setDiscount(e.target.value)}
-            placeholder="0.00" min="0" style={inputStyle} />
-        </div>
+        {/* Discount — hidden by default, tap to reveal */}
+        {showDiscount || discountVal > 0 ? (
+          <div>
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: B.text }}>Discount (₹)</label>
+            <input type="number" value={discount} onChange={e => setDiscount(e.target.value)}
+              placeholder="0.00" min="0" style={inputStyle} autoFocus />
+          </div>
+        ) : (
+          <button type="button" onClick={() => setShowDiscount(true)}
+            className="text-sm font-bold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+            style={{ background: '#fff9ee', border: `1px dashed ${B.gold}`, color: B.goldDark }}>
+            + Add discount
+          </button>
+        )}
 
         {/* Payment method */}
         <div>
@@ -256,7 +265,7 @@ function HeldBillsModal({ onClose, onRetrieve }) {
 
 function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onCheckout, onHold, onShowHeld, subtotal, gstTotal, grandTotal }) {
   return (
-    <div className="flex flex-col h-full" style={{ background: B.cream }}>
+    <div className="flex flex-col flex-1 min-h-0 h-full" style={{ background: B.cream }}>
       {/* Header */}
       <div className="px-4 py-3 flex items-center justify-between flex-shrink-0"
         style={{ background: B.bgGrad, borderBottom: B.goldBorder }}>
@@ -271,7 +280,7 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
       </div>
 
       {/* Items */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
         {cart.length === 0 ? (
           <div className="text-center py-10 text-sm" style={{ color: B.textLight }}>Cart is empty</div>
         ) : cart.map(item => (
@@ -332,16 +341,16 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
               <span style={{ color: B.goldDark }}>₹{Math.round(grandTotal)}</span>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={onHold}
-              className="flex-1 font-bold py-3 rounded-xl text-sm transition-all active:scale-95"
-              style={{ background: '#fff9ee', color: B.text, border: `2px solid ${B.gold}` }}>
-              Hold Bill
-            </button>
+          <div className="flex gap-2 flex-wrap">
             <button onClick={onCheckout}
-              className="flex-grow-[2] font-bold py-3 rounded-xl text-sm transition-all active:scale-95"
+              className="flex-[2] min-w-[150px] font-bold py-3 rounded-xl text-sm transition-all active:scale-95"
               style={{ background: B.goldGrad, color: B.brown, boxShadow: '0 3px 12px rgba(180,130,10,0.35)' }}>
               Checkout
+            </button>
+            <button onClick={onHold}
+              className="flex-1 min-w-[110px] font-bold py-3 rounded-xl text-sm transition-all active:scale-95"
+              style={{ background: '#fff9ee', color: B.text, border: `2px solid ${B.gold}` }}>
+              Hold Bill
             </button>
           </div>
         </div>
@@ -551,7 +560,7 @@ export default function Billing() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col print:bg-white" style={{ background: B.pageGrad }}>
+    <div className="h-screen flex flex-col overflow-hidden print:bg-white" style={{ background: B.pageGrad }}>
 
       {/* ── Header ── */}
       <header className="flex-shrink-0 px-4 py-2 shadow-lg print:hidden"
@@ -717,7 +726,7 @@ export default function Billing() {
         </main>
 
         {/* ── Cart Sidebar (desktop XL+) ── */}
-        <aside className="w-80 flex-shrink-0 hidden xl:flex flex-col"
+        <aside className="w-80 flex-shrink-0 hidden xl:flex flex-col overflow-hidden"
           style={{ borderLeft: B.goldBorder }}>
           <CartPanel {...cartProps} />
         </aside>
