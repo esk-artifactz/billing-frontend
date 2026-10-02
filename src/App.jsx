@@ -20,6 +20,7 @@ import DailyExpenses from './pages/DailyExpenses';
 import ExpenseCategories from './pages/ExpenseCategories';
 import Contacts from './pages/Contacts';
 import SalesHistory from './pages/SalesHistory';
+import StockValuation from './pages/StockValuation';
 
 export default function App() {
   return (
@@ -196,6 +197,16 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <SalesHistory />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Stock Valuation — Admin only */}
+          <Route
+            path="/stock-valuation"
+            element={
+              <ProtectedRoute adminOnly>
+                <StockValuation />
               </ProtectedRoute>
             }
           />

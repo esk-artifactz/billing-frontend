@@ -358,7 +358,7 @@ export default function SalesReport() {
 
             {/* Category table */}
             <Card title="Category Summary" subtitle="All categories with full breakdown">
-              <div className="overflow-x-auto mt-2">
+              <div className="overflow-x-auto mt-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ borderBottom: `2px solid ${B.gold}` }}>
@@ -411,7 +411,7 @@ export default function SalesReport() {
               {topProducts.length === 0 ? (
                 <p className="text-center py-8 font-medium" style={{ color: B.textLight }}>No product sales in this range.</p>
               ) : (
-                <div className="overflow-x-auto mt-2">
+                <div className="overflow-x-auto mt-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ borderBottom: `2px solid ${B.gold}` }}>

@@ -9,3 +9,10 @@ html, body {
   height: 100%;
   overflow-x: hidden;
 }
+
+/* Hide horizontal scrollbar globally — tables still scroll via overflow-x-auto
+   but the scrollbar track itself is invisible */
+::-webkit-scrollbar:horizontal {
+  height: 0;
+  display: none;
+}

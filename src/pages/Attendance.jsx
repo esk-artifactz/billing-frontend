@@ -201,7 +201,7 @@ export default function Attendance() {
               <p className="text-sm mt-1">Ask an Admin to add employees first.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: `linear-gradient(90deg, ${B.darkBrown}, ${B.midBrown})` }}>

@@ -266,7 +266,7 @@ export default function Products() {
               {search ? 'No products match your search.' : 'No products yet. Add your first one.'}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               <table className="w-full text-sm" style={{ minWidth: 900 }}>
                 <thead>
                   <tr style={{ background: B.bgGrad }}>

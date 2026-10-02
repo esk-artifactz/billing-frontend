@@ -123,6 +123,10 @@ export const deleteCreditBill   = (id)               => api.delete(`/credit-bill
 
 export const getStockAlerts = () => api.get('/stock/alerts');
 
+// ── Stock Valuation ───────────────────────────────────────────────────────────
+
+export const getStockValuation = (params = {}) => api.get('/stock-valuation', { params });
+
 // ── Sales Stats ───────────────────────────────────────────────────────────────
 
 export const getCategorySalesStats = ({ dateFrom, dateTo } = {}) => {

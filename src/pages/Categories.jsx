@@ -157,7 +157,7 @@ export default function Categories() {
           ) : categories.length === 0 ? (
             <div className="p-10 text-center font-medium" style={{ color: B.textLight }}>No categories yet. Add your first one.</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               <table className="w-full">
                 <thead>
                   <tr style={{ background: B.bgGrad }}>

@@ -487,7 +487,7 @@ export default function AttendanceReport() {
                   <p className="text-sm mt-1">Add employees and mark attendance first.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ background: `linear-gradient(90deg, ${B.darkBrown}, ${B.midBrown})` }}>
@@ -581,7 +581,7 @@ export default function AttendanceReport() {
                   <p className="text-sm mt-1">Click "+ Onboard Employee" to add the first employee.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ background: `linear-gradient(90deg, ${B.darkBrown}, ${B.midBrown})` }}>

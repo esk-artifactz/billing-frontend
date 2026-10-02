@@ -291,7 +291,7 @@ export default function ExpenseCategories() {
                 {report.by_supplier.length === 0 ? (
                   <p className="text-center py-10 text-sm" style={{ color: B.textLight }}>No "Paid To" data for selected period.</p>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                     <table className="w-full text-sm">
                       <thead>
                         <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
@@ -369,7 +369,7 @@ export default function ExpenseCategories() {
                 {report.recent.length === 0 ? (
                   <p className="text-center py-10 text-sm" style={{ color: B.textLight }}>No transactions.</p>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                     <table className="w-full text-sm">
                       <thead>
                         <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
@@ -460,63 +460,101 @@ export default function ExpenseCategories() {
                 className="text-2xl font-bold leading-none" style={{ color: '#dc2626' }}>×</button>
             </div>
 
-            {/* Table */}
-            <div className="overflow-y-auto flex-1">
+            {/* Card list — no table, no horizontal scroll */}
+            <div className="overflow-y-auto flex-1 px-4 py-3 space-y-2">
               {(report.unpaid_items || []).length === 0 ? (
                 <div className="py-16 text-center">
                   <p className="text-4xl mb-3">✅</p>
                   <p className="font-semibold" style={{ color: '#16a34a' }}>All expenses are paid!</p>
                 </div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0">
-                    <tr style={{ background: '#7f1d1d' }}>
-                      {['Date', 'Category', 'Description', 'Pay To', 'Amount'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
-                          style={{ color: '#fecaca' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(report.unpaid_items || []).map((e, idx) => {
-                      const pm = PM_STYLE[e.payment_mode] || { bg: '#f5f5f5', color: '#555', label: e.payment_mode };
-                      return (
-                        <tr key={e.id}
-                          style={{ background: idx % 2 === 0 ? '#fff' : '#fff5f5', borderBottom: '1px solid #fee2e2' }}>
-                          <td className="px-4 py-3 text-xs font-semibold whitespace-nowrap" style={{ color: '#7f1d1d' }}>
-                            {e.expense_date?.slice(0, 10)}
-                          </td>
-                          <td className="px-4 py-3">
+                <>
+                  {(report.unpaid_items || []).map((e) => {
+                    const remaining = parseFloat(e.remaining_amount ?? e.amount);
+                    const paid      = parseFloat(e.paid_amount ?? 0);
+                    const total     = parseFloat(e.amount ?? 0);
+                    const isPartial = paid > 0 && paid < total;
+                    return (
+                      <div key={e.id} className="rounded-xl border p-3 space-y-2"
+                        style={{ background: '#fff', borderColor: '#fecaca' }}>
+                        {/* Row 1: date + category + status badge */}
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold" style={{ color: '#7f1d1d' }}>
+                              {e.expense_date?.slice(0, 10)}
+                            </span>
                             <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                               style={{ background: '#fee2e2', color: '#dc2626' }}>
                               {e.category}
                             </span>
-                          </td>
-                          <td className="px-4 py-3 max-w-[180px]">
-                            <div className="truncate font-semibold" style={{ color: '#1c1917' }}>{e.description}</div>
-                            {e.notes && <div className="truncate text-xs text-gray-400">{e.notes}</div>}
-                          </td>
-                          <td className="px-4 py-3 font-semibold" style={{ color: '#7f1d1d' }}>
-                            {e.paid_to || <span className="text-gray-400 italic">—</span>}
-                          </td>
-                          <td className="px-4 py-3 font-extrabold whitespace-nowrap" style={{ color: '#dc2626' }}>
-                            {fmtINR(e.amount)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background: '#fef2f2', borderTop: '2px solid #fca5a5' }}>
-                      <td colSpan={4} className="px-4 py-3 text-sm font-bold text-right" style={{ color: '#7f1d1d' }}>
-                        Total Unpaid:
-                      </td>
-                      <td className="px-4 py-3 font-extrabold text-base" style={{ color: '#dc2626' }}>
-                        {fmtINR(report.unpaid_total)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+                            {isPartial && (
+                              <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                                style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fcd34d' }}>
+                                Partial
+                              </span>
+                            )}
+                          </div>
+                          {e.paid_to && (
+                            <span className="text-xs font-semibold" style={{ color: '#7f1d1d' }}>
+                              {e.paid_to}
+                            </span>
+                          )}
+                        </div>
+                        {/* Row 2: description */}
+                        <p className="text-sm font-semibold truncate" style={{ color: '#1c1917' }}>
+                          {e.description}
+                        </p>
+                        {e.notes && <p className="text-xs text-gray-400 truncate">{e.notes}</p>}
+                        {/* Row 3: Bill / Paid / Remaining */}
+                        <div className="grid grid-cols-3 gap-2 pt-1">
+                          <div className="rounded-lg px-2 py-1.5 text-center" style={{ background: '#f9fafb' }}>
+                            <p className="text-xs font-bold uppercase tracking-wide mb-0.5" style={{ color: '#9ca3af' }}>Bill</p>
+                            <p className="text-sm font-extrabold" style={{ color: '#374151' }}>{fmtINR(total)}</p>
+                          </div>
+                          <div className="rounded-lg px-2 py-1.5 text-center" style={{ background: '#f0fdf4' }}>
+                            <p className="text-xs font-bold uppercase tracking-wide mb-0.5" style={{ color: '#16a34a' }}>Paid</p>
+                            <p className="text-sm font-extrabold" style={{ color: '#16a34a' }}>{fmtINR(paid)}</p>
+                          </div>
+                          <div className="rounded-lg px-2 py-1.5 text-center" style={{ background: '#fef2f2' }}>
+                            <p className="text-xs font-bold uppercase tracking-wide mb-0.5" style={{ color: '#dc2626' }}>Due</p>
+                            <p className="text-sm font-extrabold" style={{ color: '#dc2626' }}>{fmtINR(remaining)}</p>
+                          </div>
+                        </div>
+                        {/* Progress bar */}
+                        {total > 0 && (
+                          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#fecaca' }}>
+                            <div className="h-full rounded-full"
+                              style={{ width: `${Math.min((paid / total) * 100, 100)}%`, background: '#16a34a', transition: 'width 0.3s' }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {/* Footer total */}
+                  <div className="rounded-xl p-3 sticky bottom-0"
+                    style={{ background: '#fef2f2', border: '2px solid #fca5a5' }}>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <p className="text-xs font-bold uppercase" style={{ color: '#9ca3af' }}>Total Bill</p>
+                        <p className="text-sm font-extrabold" style={{ color: '#374151' }}>
+                          {fmtINR((report.unpaid_items || []).reduce((s, e) => s + parseFloat(e.amount || 0), 0))}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold uppercase" style={{ color: '#16a34a' }}>Total Paid</p>
+                        <p className="text-sm font-extrabold" style={{ color: '#16a34a' }}>
+                          {fmtINR((report.unpaid_items || []).reduce((s, e) => s + parseFloat(e.paid_amount || 0), 0))}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold uppercase" style={{ color: '#dc2626' }}>Total Due</p>
+                        <p className="text-sm font-extrabold" style={{ color: '#dc2626' }}>
+                          {fmtINR(report.unpaid_total)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
 

@@ -189,7 +189,7 @@ export default function SalesHistory() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>

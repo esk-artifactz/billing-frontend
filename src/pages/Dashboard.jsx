@@ -159,6 +159,7 @@ export default function Dashboard() {
               <NavBtn onClick={() => navigate('/expense-categories')} color="#92400e">Expense Report</NavBtn>
               <NavBtn onClick={() => navigate('/contacts')} color="#4f6d7a">Contact Book</NavBtn>
               <NavBtn onClick={() => navigate('/sales-history')} color="#2d6a4f">Bill History</NavBtn>
+              <NavBtn onClick={() => navigate('/stock-valuation')} color="#0f766e">Stock Valuation</NavBtn>
             </div>
           </ActionCard>
         )}

@@ -447,12 +447,12 @@ export default function DailyExpenses() {
               <p className="text-sm mt-1" style={{ color: '#bbb' }}>Click "+ Add Expense" to record a spend.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
                     {['Date', 'Category', 'Description', 'Paid To', 'Amount', 'Mode', 'Status', 'Recorded By', 'Actions'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
+                      <th key={h} className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
                         style={{ color: B.goldLight }}>{h}</th>
                     ))}
                   </tr>
@@ -712,7 +712,7 @@ export default function DailyExpenses() {
             ) : (
               <div className="rounded-2xl shadow-sm overflow-hidden"
                 style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>

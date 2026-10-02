@@ -162,7 +162,7 @@ export default function Suppliers() {
               {!search && <p className="text-sm mt-1">Click "+ Add Supplier" to create one.</p>}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: `linear-gradient(90deg, ${B.darkBrown}, ${B.midBrown})` }}>
