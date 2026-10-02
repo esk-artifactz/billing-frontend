@@ -60,6 +60,8 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
   const [amountTendered, setAmountTendered] = useState('');
   const [discount, setDiscount]             = useState('');
   const [showDiscount, setShowDiscount]     = useState(false);
+  const [parcel, setParcel]                 = useState('');
+  const [showParcel, setShowParcel]         = useState(false);
   const [customerName, setCustomerName]     = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
   const [loading, setLoading] = useState(false);
@@ -67,7 +69,8 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
 
   const subtotal    = cart.reduce((s, i) => s + parseFloat(i.selling_price) * i.quantity, 0);
   const discountVal = parseFloat(discount) || 0;
-  const grandBefore = subtotal - discountVal;
+  const parcelVal   = parseFloat(parcel) || 0;
+  const grandBefore = subtotal - discountVal + parcelVal;
   const grandTotal  = Math.round(grandBefore);
   const roundOff    = grandTotal - grandBefore;
   const tendered    = parseFloat(amountTendered) || 0;
@@ -85,6 +88,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
       const res = await apiCheckout({
         items: cart.map(i => ({ product_id: i.id, quantity: i.quantity, discount_amount: 0 })),
         discount_total:  discountVal,
+        parcel_charge:   parcelVal || undefined,
         payment_method:  paymentMethod,
         amount_tendered: paymentMethod === 'cash' ? tendered : grandTotal,
         customer_name:   customerName.trim() || undefined,
@@ -115,26 +119,42 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         <div className="rounded-xl p-4 space-y-2 text-sm" style={{ background: '#fff9ee', border: B.goldBorder }}>
           <div className="flex justify-between" style={{ color: B.textLight }}><span>Subtotal</span><span>₹{fmt(subtotal)}</span></div>
           {discountVal > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-₹{fmt(discountVal)}</span></div>}
-          {roundOff !== 0 && <div className="flex justify-between text-xs" style={{ color: '#aaa' }}><span>Round Off</span><span>₹{fmt(roundOff)}</span></div>}
+          {parcelVal   > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Parcel Charge</span><span>+₹{fmt(parcelVal)}</span></div>}
+          {roundOff   !== 0 && <div className="flex justify-between text-xs" style={{ color: '#aaa' }}><span>Round Off</span><span>₹{fmt(roundOff)}</span></div>}
           <div className="flex justify-between font-bold text-lg border-t pt-2" style={{ borderColor: B.gold, color: B.text }}>
             <span>Total</span><span style={{ color: B.goldDark }}>₹{fmt(grandTotal)}</span>
           </div>
         </div>
 
-        {/* Discount — hidden by default, tap to reveal */}
-        {showDiscount || discountVal > 0 ? (
-          <div>
-            <label className="block text-sm font-semibold mb-1.5" style={{ color: B.text }}>Discount (₹)</label>
-            <input type="number" value={discount} onChange={e => setDiscount(e.target.value)}
-              placeholder="0.00" min="0" style={inputStyle} autoFocus />
-          </div>
-        ) : (
-          <button type="button" onClick={() => setShowDiscount(true)}
-            className="text-sm font-bold px-3 py-1.5 rounded-lg transition-all active:scale-95"
-            style={{ background: '#fff9ee', border: `1px dashed ${B.gold}`, color: B.goldDark }}>
-            + Add discount
-          </button>
-        )}
+        {/* Optional charge row: Discount + Parcel side by side */}
+        <div className="flex gap-2">
+          {showDiscount || discountVal > 0 ? (
+            <div className="flex-1">
+              <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Discount (₹)</label>
+              <input type="number" value={discount} onChange={e => setDiscount(e.target.value)}
+                placeholder="0.00" min="0" style={inputStyle} />
+            </div>
+          ) : (
+            <button type="button" onClick={() => setShowDiscount(true)}
+              className="flex-1 text-sm font-bold px-3 py-2.5 rounded-xl transition-all active:scale-95"
+              style={{ background: '#fff9ee', border: `1px dashed ${B.gold}`, color: B.goldDark }}>
+              + Discount
+            </button>
+          )}
+          {showParcel || parcelVal > 0 ? (
+            <div className="flex-1">
+              <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Parcel Charge (₹)</label>
+              <input type="number" value={parcel} onChange={e => setParcel(e.target.value)}
+                placeholder="0.00" min="0" style={inputStyle} autoFocus />
+            </div>
+          ) : (
+            <button type="button" onClick={() => setShowParcel(true)}
+              className="flex-1 text-sm font-bold px-3 py-2.5 rounded-xl transition-all active:scale-95"
+              style={{ background: '#fff9ee', border: `1px dashed #f59e0b`, color: '#b45309' }}>
+              + Parcel
+            </button>
+          )}
+        </div>
 
         {/* Payment method */}
         <div>

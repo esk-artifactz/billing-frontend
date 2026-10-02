@@ -34,6 +34,7 @@ export default function ExpenseCategories() {
   const [filterCat,  setFilterCat]  = useState('all');
   const [filterMode, setFilterMode] = useState('all');
   const [reportView, setReportView] = useState('category');
+  const [showUnpaid, setShowUnpaid] = useState(false);
 
   const [toast, setToast] = useState(null);
   const showToast = (msg, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); };
@@ -187,7 +188,7 @@ export default function ExpenseCategories() {
           </div>
         ) : report ? (
           <>
-            {/* Grand total + mode cards */}
+            {/* Grand total + unpaid + mode cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="col-span-2 sm:col-span-1 rounded-2xl p-5 shadow-sm"
                 style={{ background: `linear-gradient(135deg,${B.darkBrown},${B.midBrown})`, border: `1px solid ${B.gold}` }}>
@@ -195,6 +196,24 @@ export default function ExpenseCategories() {
                 <p className="text-3xl font-extrabold" style={{ color: B.goldLight }}>{fmtINR(report.grand_total)}</p>
                 <p className="text-xs mt-1" style={{ color: '#c8a84b' }}>{dateFrom} → {dateTo}</p>
               </div>
+              {/* Unpaid card — clickable */}
+              <button onClick={() => setShowUnpaid(true)}
+                className="rounded-2xl p-5 shadow-sm text-left transition-all active:scale-95"
+                style={{ background: parseFloat(report.unpaid_total) > 0 ? '#fef2f2' : '#f0fdf4',
+                         border: `1.5px solid ${parseFloat(report.unpaid_total) > 0 ? '#fca5a5' : '#bbf7d0'}` }}>
+                <p className="text-xs font-bold uppercase tracking-wider mb-1"
+                  style={{ color: parseFloat(report.unpaid_total) > 0 ? '#dc2626' : '#16a34a' }}>
+                  Unpaid / Pending
+                </p>
+                <p className="text-2xl font-extrabold"
+                  style={{ color: parseFloat(report.unpaid_total) > 0 ? '#dc2626' : '#16a34a' }}>
+                  {fmtINR(report.unpaid_total)}
+                </p>
+                <p className="text-xs mt-1"
+                  style={{ color: parseFloat(report.unpaid_total) > 0 ? '#ef4444' : '#22c55e' }}>
+                  {(report.unpaid_items || []).length} unpaid entries · tap to view
+                </p>
+              </button>
               {(report.by_mode || []).map(m => {
                 const s = PM_STYLE[m.mode] || { bg: '#f5f5f5', color: '#555', label: m.mode };
                 return (
@@ -413,8 +432,98 @@ export default function ExpenseCategories() {
           <div className="text-center py-16" style={{ color: B.textLight }}>
             <p className="text-lg font-semibold">Set a date range and click "Run Report"</p>
           </div>
+
         )}
       </div>
+
+      {/* ── Unpaid Drawer ──────────────────────────────────────────────────────── */}
+      {showUnpaid && report && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4"
+          style={{ background: 'rgba(45,26,14,0.65)' }}>
+          <div className="w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+            style={{ background: '#fff', border: `2px solid #fca5a5` }}>
+
+            {/* Header */}
+            <div className="h-1 flex-shrink-0" style={{ background: 'linear-gradient(90deg,#dc2626,#f87171,#dc2626)' }} />
+            <div className="px-5 py-4 flex items-center justify-between flex-shrink-0"
+              style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca' }}>
+              <div>
+                <h3 className="text-base font-extrabold" style={{ color: '#7f1d1d' }}>
+                  Unpaid / Pending Expenses
+                </h3>
+                <p className="text-xs mt-0.5" style={{ color: '#ef4444' }}>
+                  {dateFrom} → {dateTo} &nbsp;·&nbsp; {(report.unpaid_items || []).length} entries &nbsp;·&nbsp;
+                  Total: <span className="font-extrabold">{fmtINR(report.unpaid_total)}</span>
+                </p>
+              </div>
+              <button onClick={() => setShowUnpaid(false)}
+                className="text-2xl font-bold leading-none" style={{ color: '#dc2626' }}>×</button>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-y-auto flex-1">
+              {(report.unpaid_items || []).length === 0 ? (
+                <div className="py-16 text-center">
+                  <p className="text-4xl mb-3">✅</p>
+                  <p className="font-semibold" style={{ color: '#16a34a' }}>All expenses are paid!</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0">
+                    <tr style={{ background: '#7f1d1d' }}>
+                      {['Date', 'Category', 'Description', 'Pay To', 'Amount'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
+                          style={{ color: '#fecaca' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(report.unpaid_items || []).map((e, idx) => {
+                      const pm = PM_STYLE[e.payment_mode] || { bg: '#f5f5f5', color: '#555', label: e.payment_mode };
+                      return (
+                        <tr key={e.id}
+                          style={{ background: idx % 2 === 0 ? '#fff' : '#fff5f5', borderBottom: '1px solid #fee2e2' }}>
+                          <td className="px-4 py-3 text-xs font-semibold whitespace-nowrap" style={{ color: '#7f1d1d' }}>
+                            {e.expense_date?.slice(0, 10)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                              style={{ background: '#fee2e2', color: '#dc2626' }}>
+                              {e.category}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 max-w-[180px]">
+                            <div className="truncate font-semibold" style={{ color: '#1c1917' }}>{e.description}</div>
+                            {e.notes && <div className="truncate text-xs text-gray-400">{e.notes}</div>}
+                          </td>
+                          <td className="px-4 py-3 font-semibold" style={{ color: '#7f1d1d' }}>
+                            {e.paid_to || <span className="text-gray-400 italic">—</span>}
+                          </td>
+                          <td className="px-4 py-3 font-extrabold whitespace-nowrap" style={{ color: '#dc2626' }}>
+                            {fmtINR(e.amount)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: '#fef2f2', borderTop: '2px solid #fca5a5' }}>
+                      <td colSpan={4} className="px-4 py-3 text-sm font-bold text-right" style={{ color: '#7f1d1d' }}>
+                        Total Unpaid:
+                      </td>
+                      <td className="px-4 py-3 font-extrabold text-base" style={{ color: '#dc2626' }}>
+                        {fmtINR(report.unpaid_total)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
