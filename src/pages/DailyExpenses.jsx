@@ -24,7 +24,7 @@ const today  = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ko
 const EMPTY_FORM = {
   expense_date: today(), category: '', description: '', amount: '',
   payment_mode: 'cash', paid_to: '', notes: '', supplier_id: '', employee_id: '',
-  is_paid: true,
+  paid_amount: '',   // '' = full payment; otherwise partial
 };
 
 // Categories that represent staff salary/wage payouts
@@ -118,13 +118,20 @@ export default function DailyExpenses() {
     setFormErr(''); setEditId(null); setModal('add');
   };
   const openEdit = (e) => {
+    const amt  = parseFloat(e.amount || 0);
+    const paid = parseFloat(e.paid_amount ?? (e.is_paid !== false ? amt : 0));
+    // Re-match supplier by name so the dropdown pre-selects the right entry
+    const matchedSupplier = suppliers.find(
+      s => s.name && e.paid_to && s.name.trim().toLowerCase() === e.paid_to.trim().toLowerCase()
+    );
     setForm({
       expense_date: e.expense_date?.slice(0, 10) || today(),
       category: e.category, description: e.description,
       amount: e.amount, payment_mode: e.payment_mode,
-      paid_to: e.paid_to || '', notes: e.notes || '', supplier_id: '',
+      paid_to: e.paid_to || '', notes: e.notes || '',
+      supplier_id: matchedSupplier ? String(matchedSupplier.id) : '',
       employee_id: e.employee_id || '',
-      is_paid: e.is_paid !== false,
+      paid_amount: paid < amt ? String(paid) : '',  // '' = full; partial → show value
     });
     setEditId(e.id); setFormErr(''); setModal('edit');
   };
@@ -144,9 +151,10 @@ export default function DailyExpenses() {
           updated.paid_to = '';
         }
       }
-      // When category changes away from Supplier Payment, clear supplier_id
-      if (name === 'category' && value !== 'Supplier Payment') {
-        updated.supplier_id = '';
+      // When category changes, clear supplier_id / employee_id when they no longer apply
+      if (name === 'category') {
+        if (value !== 'Supplier Payment') updated.supplier_id = '';
+        if (!SALARY_CAT.test(value))      updated.employee_id = '';
       }
       // Employee picked → auto-fill Paid To + Description for salary entries
       if (name === 'employee_id') {
@@ -171,15 +179,24 @@ export default function DailyExpenses() {
       setFormErr('Pick the employee this salary/wage payment is for.');
       return;
     }
+    const totalAmt = parseFloat(form.amount) || 0;
+    const paidAmt  = form.paid_amount === '' ? totalAmt
+                   : form.paid_amount === 'partial_init' ? 0
+                   : parseFloat(form.paid_amount) || 0;
+    if (paidAmt > totalAmt) {
+      setFormErr('Paid amount cannot exceed the total amount.');
+      return;
+    }
+    const payload = { ...form, paid_amount: paidAmt };
     setSaving(true); setFormErr('');
     try {
       if (modal === 'add') {
-        const res = await createDailyExpense(form);
+        const res = await createDailyExpense(payload);
         showToast(res.data?._queued
           ? 'Saved offline — will sync when network returns'
           : 'Expense recorded!');
       } else {
-        await updateDailyExpense(editId, form);
+        await updateDailyExpense(editId, payload);
         showToast('Expense updated!');
       }
       closeModal(); load();
@@ -188,8 +205,11 @@ export default function DailyExpenses() {
   };
 
   const togglePaid = async (e) => {
+    // If currently unpaid/partial → mark fully paid; if paid → mark fully unpaid
+    const fullyPaid = e.is_paid && (e.remaining_amount === 0);
+    const newPaid   = fullyPaid ? 0 : parseFloat(e.amount);
     try {
-      await updateDailyExpense(e.id, { is_paid: e.is_paid === false });
+      await updateDailyExpense(e.id, { paid_amount: newPaid });
       load();
     } catch { showToast('Failed to update status.', false); }
   };
@@ -237,9 +257,9 @@ export default function DailyExpenses() {
   const advShownTotal = showAdvances ? advTotal : 0;
   const payShownTotal = showAdvances ? payTotal : 0;
 
-  // Amount still owed (unpaid expense rows)
+  // Amount still owed (remaining across all expense rows — includes partial payments)
   const unpaidTotal = expenses.reduce(
-    (s, e) => s + (e.is_paid === false ? parseFloat(e.amount || 0) : 0), 0);
+    (s, e) => s + parseFloat(e.remaining_amount || 0), 0);
 
   // Summaries
   const byMode = expenses.reduce((acc, e) => {
@@ -579,8 +599,13 @@ export default function DailyExpenses() {
                           {e.notes && <div className="text-xs text-gray-400 truncate" title={e.notes}>{e.notes}</div>}
                         </td>
                         <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{e.paid_to || '—'}</td>
-                        <td className="px-4 py-3 font-extrabold whitespace-nowrap" style={{ color: B.brown }}>
-                          {fmtINR(e.amount)}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="font-extrabold" style={{ color: B.brown }}>{fmtINR(e.amount)}</div>
+                          {parseFloat(e.remaining_amount) > 0 && (
+                            <div className="text-xs font-semibold mt-0.5" style={{ color: '#dc2626' }}>
+                              Paid {fmtINR(e.paid_amount)}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full uppercase"
@@ -589,26 +614,52 @@ export default function DailyExpenses() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          {e.is_paid === false ? (
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                              style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}>
-                              Unpaid
-                            </span>
-                          ) : (
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                              style={{ background: '#dcfce7', color: '#16a34a' }}>Paid</span>
-                          )}
+                          {(() => {
+                            const rem = parseFloat(e.remaining_amount || 0);
+                            const paid = parseFloat(e.paid_amount || 0);
+                            const total = parseFloat(e.amount || 0);
+                            if (rem <= 0) return (
+                              <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                                style={{ background: '#dcfce7', color: '#16a34a' }}>Paid</span>
+                            );
+                            if (paid > 0 && paid < total) return (
+                              <div>
+                                <span className="text-xs font-bold px-2 py-0.5 rounded-full block"
+                                  style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fcd34d' }}>
+                                  Partial
+                                </span>
+                                <span className="text-xs font-semibold block mt-0.5" style={{ color: '#dc2626' }}>
+                                  Due: {fmtINR(rem)}
+                                </span>
+                              </div>
+                            );
+                            return (
+                              <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                                style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}>
+                                Unpaid
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{e.recorded_by || '—'}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
-                            <button onClick={() => togglePaid(e)}
-                              title={e.is_paid === false ? 'Mark as paid' : 'Mark as unpaid'}
-                              className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
-                              style={{ background: e.is_paid === false ? '#dcfce7' : '#fef3c7',
-                                       color:      e.is_paid === false ? '#16a34a' : '#b45309' }}>
-                              {e.is_paid === false ? '✓ Paid' : 'Unpaid'}
-                            </button>
+                            {/* Toggle: unpaid/partial → mark fully paid; paid → mark unpaid */}
+                            {parseFloat(e.remaining_amount || 0) > 0 ? (
+                              <button onClick={() => togglePaid(e)}
+                                title="Mark as fully paid"
+                                className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                                style={{ background: '#dcfce7', color: '#16a34a' }}>
+                                ✓ Mark Paid
+                              </button>
+                            ) : (
+                              <button onClick={() => togglePaid(e)}
+                                title="Mark as unpaid"
+                                className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                                style={{ background: '#fef3c7', color: '#b45309' }}>
+                                Unpaid
+                              </button>
+                            )}
                             <button onClick={() => openEdit(e)}
                               className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
                               style={{ background: '#dbeafe', color: '#1d4ed8' }}>
@@ -787,39 +838,33 @@ export default function DailyExpenses() {
                   </div>
                 )}
 
-                {/* Employee picker — always available; required for salary-type
-                    categories so the payment lands in the HR salary report */}
-                {(() => {
-                  const isSal = SALARY_CAT.test(form.category);
-                  return (
-                    <div className="rounded-xl p-3 border"
-                      style={{ background: isSal ? '#f0fdf4' : '#fafafa',
-                               borderColor: isSal ? '#16a34a' : '#e8d5a3' }}>
-                      <label className="text-xs font-bold mb-1 block"
-                        style={{ color: isSal ? '#166534' : B.brown }}>
-                        Link to Employee {isSal && '*'}
-                        <span className="ml-1 font-normal text-gray-400">
-                          (counts toward their salary in HR report)
-                        </span>
-                      </label>
-                      <select name="employee_id" value={form.employee_id} onChange={handleChange}
-                        className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none"
-                        style={{ borderColor: isSal ? '#16a34a' : '#e8d5a3' }}>
-                        <option value="">— None —</option>
-                        {employees.map(emp => (
-                          <option key={emp.id} value={emp.id}>
-                            {emp.full_name}{emp.role ? ` · ${emp.role}` : ''}
-                          </option>
-                        ))}
-                      </select>
-                      {employees.length === 0 && (
-                        <p className="text-xs mt-1 text-gray-400">
-                          No employees found. Add them in HR / Employees first.
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
+                {/* Employee picker — shown only for Labour/Salary categories */}
+                {SALARY_CAT.test(form.category) && (
+                  <div className="rounded-xl p-3 border"
+                    style={{ background: '#f0fdf4', borderColor: '#16a34a' }}>
+                    <label className="text-xs font-bold mb-1 block" style={{ color: '#166534' }}>
+                      Select Employee *
+                      <span className="ml-1 font-normal text-gray-400">
+                        (counts toward their salary in HR report)
+                      </span>
+                    </label>
+                    <select name="employee_id" value={form.employee_id} onChange={handleChange}
+                      className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none"
+                      style={{ borderColor: '#16a34a' }}>
+                      <option value="">— Pick an employee —</option>
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.full_name}{emp.role ? ` · ${emp.role}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {employees.length === 0 && (
+                      <p className="text-xs mt-1 text-gray-400">
+                        No employees found. Add them in HR / Employees first.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>Description *</label>
@@ -858,16 +903,116 @@ export default function DailyExpenses() {
                     className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none resize-none"
                     style={{ borderColor: '#e8d5a3' }} placeholder="Optional details…" />
                 </div>
-                <label className="flex items-center gap-2.5 cursor-pointer select-none rounded-xl p-3 border"
-                  style={{ background: form.is_paid ? '#f0fdf4' : '#fef2f2',
-                           borderColor: form.is_paid ? '#bbf7d0' : '#fecaca' }}>
-                  <input type="checkbox" name="is_paid" checked={form.is_paid}
-                    onChange={e => setForm(f => ({ ...f, is_paid: e.target.checked }))}
-                    className="w-4 h-4 accent-green-600" />
-                  <span className="text-sm font-bold" style={{ color: form.is_paid ? '#166534' : '#dc2626' }}>
-                    {form.is_paid ? 'Paid' : 'Unpaid — amount still owed'}
-                  </span>
-                </label>
+                {/* ── Payment Status ──────────────────────────────── */}
+                {(() => {
+                  const total     = parseFloat(form.amount) || 0;
+                  // '' = full payment; '0' = unpaid; any other value = partial
+                  const paidAmt   = form.paid_amount === '' ? total
+                                  : form.paid_amount === 'partial_init' ? 0
+                                  : parseFloat(form.paid_amount) || 0;
+                  const remaining = Math.max(total - paidAmt, 0);
+                  const mode      = form.paid_amount === ''  ? 'full'
+                                  : form.paid_amount === '0' ? 'unpaid'
+                                  : 'partial';
+
+                  const borderColor = mode === 'full' ? '#bbf7d0' : mode === 'partial' ? '#fcd34d' : '#fecaca';
+                  const bgColor     = mode === 'full' ? '#f0fdf4' : mode === 'partial' ? '#fffbeb' : '#fef2f2';
+
+                  return (
+                    <div className="rounded-xl border p-3 space-y-3" style={{ background: bgColor, borderColor }}>
+
+                      {/* Mode selector */}
+                      <div className="flex gap-2">
+                        {[
+                          { key: 'full',    label: '✓ Full Payment', active: mode === 'full',
+                            bg: '#16a34a', fg: '#f0fdf4', border: '#16a34a' },
+                          { key: 'partial', label: '⚡ Partial',     active: mode === 'partial',
+                            bg: '#f59e0b', fg: '#fffbeb', border: '#fcd34d' },
+                          { key: 'unpaid',  label: '✗ Unpaid',       active: mode === 'unpaid',
+                            bg: '#dc2626', fg: '#fef2f2', border: '#fca5a5' },
+                        ].map(opt => (
+                          <button key={opt.key} type="button"
+                            onClick={() => setForm(f => {
+                              if (opt.key === 'full')   return { ...f, paid_amount: '' };
+                              if (opt.key === 'unpaid') return { ...f, paid_amount: '0' };
+                              // partial — keep existing partial value; if coming from full/unpaid, start blank so user types
+                              const cur = f.paid_amount;
+                              const alreadyPartial = cur !== '' && cur !== '0';
+                              return { ...f, paid_amount: alreadyPartial ? cur : 'partial_init' };
+                            })}
+                            className="flex-1 text-xs font-bold py-2 rounded-lg transition-all active:scale-95"
+                            style={{
+                              background: opt.active ? opt.bg : opt.fg,
+                              color:      opt.active ? '#fff'  : opt.bg,
+                              border:     `1.5px solid ${opt.border}`,
+                              fontWeight: opt.active ? '800' : '600',
+                            }}>
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Partial: paid amount input */}
+                      {mode === 'partial' && (
+                        <div>
+                          <label className="text-xs font-semibold block mb-1" style={{ color: '#92400e' }}>
+                            Amount Paid Now (₹)
+                          </label>
+                          <input type="number" step="0.01" min="0.01"
+                            max={total > 0 ? total - 0.01 : undefined}
+                            value={form.paid_amount === '' || form.paid_amount === '0' || form.paid_amount === 'partial_init' ? '' : form.paid_amount}
+                            onChange={e => setForm(f => ({ ...f, paid_amount: e.target.value || 'partial_init' }))}
+                            placeholder="Enter amount paid…"
+                            autoFocus
+                            className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none font-semibold"
+                            style={{ borderColor: '#f59e0b', background: '#fff' }} />
+                        </div>
+                      )}
+
+                      {/* Bill breakdown — always shown when total > 0 */}
+                      {total > 0 && (
+                        <div className="rounded-lg overflow-hidden border" style={{ borderColor }}>
+                          <div className="grid grid-cols-3 divide-x text-center"
+                            style={{ divideColor: borderColor }}>
+                            {/* Bill Amount */}
+                            <div className="px-2 py-2" style={{ background: '#fff8' }}>
+                              <p className="text-xs font-bold uppercase tracking-wide mb-0.5"
+                                style={{ color: '#6b7280' }}>Bill Amount</p>
+                              <p className="text-base font-extrabold" style={{ color: '#1c1917' }}>
+                                ₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                            {/* Paid */}
+                            <div className="px-2 py-2" style={{ background: '#fff8' }}>
+                              <p className="text-xs font-bold uppercase tracking-wide mb-0.5"
+                                style={{ color: '#16a34a' }}>Paid</p>
+                              <p className="text-base font-extrabold" style={{ color: '#16a34a' }}>
+                                ₹{paidAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                            {/* Remaining */}
+                            <div className="px-2 py-2" style={{ background: '#fff8' }}>
+                              <p className="text-xs font-bold uppercase tracking-wide mb-0.5"
+                                style={{ color: remaining > 0 ? '#dc2626' : '#16a34a' }}>Remaining</p>
+                              <p className="text-base font-extrabold"
+                                style={{ color: remaining > 0 ? '#dc2626' : '#16a34a' }}>
+                                ₹{remaining.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          </div>
+                          {/* Visual split bar */}
+                          {total > 0 && (
+                            <div className="h-2 flex">
+                              <div style={{ width: `${(paidAmt / total) * 100}%`, background: '#16a34a', transition: 'width 0.3s' }} />
+                              <div style={{ flex: 1, background: remaining > 0 ? '#fca5a5' : 'transparent' }} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                    </div>
+                  );
+                })()}
                 <div className="flex gap-3 pt-1">
                   <button type="button" onClick={closeModal}
                     className="flex-1 py-2.5 rounded-xl text-sm font-semibold"

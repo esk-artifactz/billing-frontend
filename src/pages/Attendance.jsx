@@ -103,6 +103,7 @@ export default function Attendance() {
     }
   };
 
+  const isAdmin     = user?.role === 'Admin';
   const markedCount = rows.filter(r => r.status).length;
 
   return (
@@ -237,24 +238,44 @@ export default function Attendance() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex gap-1 flex-wrap">
-                            {STATUS_OPTIONS.map(s => (
-                              <button
-                                key={s.value}
-                                disabled={saving[emp.id]}
-                                onClick={() => handleMark(emp.id, s.value)}
-                                className="text-xs font-bold px-2.5 py-1 rounded-lg transition-all active:scale-95 disabled:opacity-50"
-                                style={{
-                                  background: emp.status === s.value ? s.color : s.bg,
-                                  color:      emp.status === s.value ? '#fff'   : s.color,
-                                  border:     `1px solid ${s.color}`,
-                                  fontWeight: emp.status === s.value ? '800' : '600',
-                                }}
-                              >
-                                {saving[emp.id] && emp.status !== s.value ? '…' : s.label}
-                              </button>
-                            ))}
-                          </div>
+                          {/* Cashier: if already marked, show locked view */}
+                          {!isAdmin && emp.status ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold px-3 py-1 rounded-full"
+                                style={{ background: statusMeta(emp.status).bg, color: statusMeta(emp.status).color }}>
+                                {statusMeta(emp.status).label}
+                              </span>
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-lg flex items-center gap-1"
+                                style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fcd34d' }}>
+                                🔒 Locked
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex gap-1 flex-wrap">
+                              {STATUS_OPTIONS.map(s => (
+                                <button
+                                  key={s.value}
+                                  disabled={saving[emp.id]}
+                                  onClick={() => handleMark(emp.id, s.value)}
+                                  className="text-xs font-bold px-2.5 py-1 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                                  style={{
+                                    background: emp.status === s.value ? s.color : s.bg,
+                                    color:      emp.status === s.value ? '#fff'   : s.color,
+                                    border:     `1px solid ${s.color}`,
+                                    fontWeight: emp.status === s.value ? '800' : '600',
+                                  }}
+                                >
+                                  {saving[emp.id] && emp.status !== s.value ? '…' : s.label}
+                                </button>
+                              ))}
+                              {isAdmin && emp.status && (
+                                <span className="text-xs font-semibold px-2 py-0.5 rounded-lg self-center"
+                                  style={{ background: '#dbeafe', color: '#1d4ed8', border: '1px solid #93c5fd' }}>
+                                  Admin override
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs" style={{ color: '#a07020' }}>
                           {emp.marked_by || '—'}
