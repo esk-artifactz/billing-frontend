@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getCategories, createCategory, updateCategory, deleteCategory } from '../api/client';
@@ -62,6 +63,7 @@ export default function Categories() {
   const openAdd  = () => { setForm(EMPTY_FORM); setFormError(''); setModal('add'); };
   const openEdit = (cat) => { setSelected(cat); setForm({ name: cat.name || '', description: cat.description || '', active: cat.active !== undefined ? cat.active : true }); setFormError(''); setModal('edit'); };
   const closeModal = () => { setModal(null); setSelected(null); };
+  useEscClose(closeModal, !!modal);
 
   const handleChange = (e) => {
     const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;

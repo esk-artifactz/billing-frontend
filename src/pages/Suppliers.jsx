@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getSuppliers, createSupplier, updateSupplier, deleteSupplier } from '../api/client';
@@ -55,6 +56,7 @@ export default function Suppliers() {
     setEditId(s.id); setFormError(''); setModal('edit');
   };
   const closeModal = () => { setModal(null); setEditId(null); };
+  useEscClose(closeModal, !!modal);
 
   const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getSalesHistory, getReceipt } from '../api/client';
@@ -31,6 +32,7 @@ export default function SalesHistory() {
   const [filterMode,  setFilterMode]  = useState('all');
 
   const [receiptData, setReceiptData] = useState(null);
+  useEscClose(() => setReceiptData(null), !!receiptData);
   const [loadingBill, setLoadingBill] = useState(null); // invoice_number being fetched
 
   const [toast, setToast] = useState(null);

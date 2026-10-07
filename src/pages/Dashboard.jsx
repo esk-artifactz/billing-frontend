@@ -160,6 +160,9 @@ export default function Dashboard() {
               <NavBtn onClick={() => navigate('/contacts')} color="#4f6d7a">Contact Book</NavBtn>
               <NavBtn onClick={() => navigate('/sales-history')} color="#2d6a4f">Bill History</NavBtn>
               <NavBtn onClick={() => navigate('/stock-valuation')} color="#0f766e">Stock Valuation</NavBtn>
+              <NavBtn onClick={() => navigate('/barcode-labels')} color="#7c3aed">Barcode / QR Labels</NavBtn>
+              <NavBtn onClick={() => navigate('/sales-return')} color="#dc2626">Sales Return</NavBtn>
+              <NavBtn onClick={() => navigate('/purchase-return')} color="#ea580c">Purchase Return</NavBtn>
             </div>
           </ActionCard>
         )}

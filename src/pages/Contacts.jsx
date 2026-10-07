@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -98,6 +99,7 @@ export default function Contacts() {
     setEditConId(c.id); setConErr(''); setConModal('edit');
   };
   const closeConModal = () => { setConModal(null); setEditConId(null); };
+  useEscClose(closeConModal, !!conModal);
   const handleConChange = (e) => setConForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
   const handleConSubmit = async (ev) => {
@@ -131,6 +133,7 @@ export default function Contacts() {
     setEditCatId(c.id); setCatErr(''); setCatModal('edit');
   };
   const closeCatModal = () => { setCatModal(null); setEditCatId(null); };
+  useEscClose(closeCatModal, !!catModal);
   const handleCatChange = (e) => setCatForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
   const handleCatSubmit = async (ev) => {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getProducts, getCategories, createCreditBill, getCreditBills, payCreditBill, deleteCreditBill } from '../api/client';
@@ -54,6 +55,7 @@ export default function CreditBills() {
 
   // Pay modal state
   const [payBill, setPayBill]     = useState(null);
+  useEscClose(() => setPayBill(null), !!payBill);
   const [payAmount, setPayAmount] = useState('');
   const [payLoading, setPayLoading] = useState(false);
   const [payError, setPayError]   = useState('');

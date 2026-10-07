@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getUsers, registerUser, updateUser } from '../api/client';
@@ -52,6 +53,7 @@ export default function Users() {
     setFormErr(''); setModal('edit');
   };
   const closeModal = () => { setModal(null); setSelected(null); };
+  useEscClose(closeModal, !!modal);
   const handleChange = (e) => {
     const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setForm(f => ({ ...f, [e.target.name]: val }));

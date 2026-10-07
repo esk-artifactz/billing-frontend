@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getExpenseCategories, getExpenseReport } from '../api/client';
@@ -35,6 +36,7 @@ export default function ExpenseCategories() {
   const [filterMode, setFilterMode] = useState('all');
   const [reportView, setReportView] = useState('category');
   const [showUnpaid, setShowUnpaid] = useState(false);
+  useEscClose(() => setShowUnpaid(false), showUnpaid);
 
   const [toast, setToast] = useState(null);
   const showToast = (msg, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); };

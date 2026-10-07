@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef } from 'react';
+import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -399,6 +400,16 @@ export default function Billing() {
   const [holdingMsg, setHoldingMsg]         = useState('');
   const [retrievedHoldRef, setRetrievedHoldRef] = useState(null);
   const [showScanner, setShowScanner]       = useState(false);
+
+  // Close any open popup/overlay on Escape
+  const anyModalOpen = showCheckout || showHeld || showMobileCart || !!receiptData || showScanner;
+  useEscClose(() => {
+    if (receiptData)      { setReceiptData(null);       return; }
+    if (showCheckout)     { setShowCheckout(false);     return; }
+    if (showScanner)      { setShowScanner(false);      return; }
+    if (showHeld)         { setShowHeld(false);         return; }
+    if (showMobileCart)   { setShowMobileCart(false);   return; }
+  }, anyModalOpen);
 
   const searchRef = useRef(null);
 

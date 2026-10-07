@@ -138,6 +138,13 @@ export const getCategorySalesStats = ({ dateFrom, dateTo } = {}) => {
 
 // ── Employees ─────────────────────────────────────────────────────────────────
 
+// Designations
+export const getDesignations    = ()           => api.get('/designations');
+export const createDesignation  = (data)       => api.post('/designations', data);
+export const updateDesignation  = (id, data)   => api.put(`/designations/${id}`, data);
+export const deleteDesignation  = (id)         => api.delete(`/designations/${id}`);
+
+// Employees
 export const getEmployees    = ()         => api.get('/employees');
 export const createEmployee  = (data)     => api.post('/employees', data);
 export const updateEmployee  = (id, data) => api.put(`/employees/${id}`, data);
@@ -147,6 +154,8 @@ export const updateEmployee  = (id, data) => api.put(`/employees/${id}`, data);
 export const getAttendance    = (date)   => api.get('/attendance', { params: { date } });
 export const markAttendance   = (data)   => api.post('/attendance', data);
 export const getAttendanceReport = (month) => api.get('/attendance/report', { params: { month } });
+export const getAttendanceDetail = (employeeId, month) =>
+  api.get('/attendance/detail', { params: { employee_id: employeeId, month } });
 
 // ── Salary ────────────────────────────────────────────────────────────────────
 
@@ -181,6 +190,19 @@ export const getPurchaseOrder     = (id)           => api.get(`/purchase-orders/
 export const receivePurchaseOrder = (id, data)     => api.post(`/purchase-orders/${id}/receive`, data);
 export const deletePurchaseOrder  = (id)           => api.delete(`/purchase-orders/${id}`);
 
+// ── Sales Returns ─────────────────────────────────────────────────────────────
+
+export const getSalesReturns    = (params = {})  => api.get('/sales-returns', { params });
+export const createSalesReturn  = (data)         => api.post('/sales-returns', data);
+export const getSalesReturn     = (id)           => api.get(`/sales-returns/${id}`);
+export const deleteSalesReturn  = (id)           => api.delete(`/sales-returns/${id}`);
+
+// ── Purchase Returns ──────────────────────────────────────────────────────────
+
+export const getPurchaseReturns    = (params = {})  => api.get('/purchase-returns', { params });
+export const createPurchaseReturn  = (data)         => api.post('/purchase-returns', data);
+export const deletePurchaseReturn  = (id)           => api.delete(`/purchase-returns/${id}`);
+
 // ── Expense Categories ────────────────────────────────────────────────────────
 
 export const getExpenseCategories    = ()          => api.get('/expense-categories');
@@ -199,6 +221,11 @@ export const createDailyExpense  = (data)        =>
   postWithFallback({ url: '/daily-expenses', data, label: 'Expense' });
 export const updateDailyExpense  = (id, data)    => api.put(`/daily-expenses/${id}`, data);
 export const deleteDailyExpense  = (id)          => api.delete(`/daily-expenses/${id}`);
+
+// Expense payment history (instalments)
+export const getExpensePayments    = (expId)          => api.get(`/daily-expenses/${expId}/payments`);
+export const addExpensePayment     = (expId, data)    => api.post(`/daily-expenses/${expId}/payments`, data);
+export const deleteExpensePayment  = (expId, payId)   => api.delete(`/daily-expenses/${expId}/payments/${payId}`);
 
 
 // ── Contact Categories ────────────────────────────────────────────────────────

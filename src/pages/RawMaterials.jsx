@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -98,6 +99,7 @@ export default function RawMaterials() {
     setEditItemId(it.id); setItemErr(''); setItemModal('edit');
   };
   const closeItemModal = () => { setItemModal(null); setEditItemId(null); };
+  useEscClose(closeItemModal, !!itemModal);
   const handleItemChange = (e) => setItemForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
   const handleItemSubmit = async (ev) => {

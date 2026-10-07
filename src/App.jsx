@@ -21,6 +21,9 @@ import ExpenseCategories from './pages/ExpenseCategories';
 import Contacts from './pages/Contacts';
 import SalesHistory from './pages/SalesHistory';
 import StockValuation from './pages/StockValuation';
+import BarcodeLabels from './pages/BarcodeLabels';
+import SalesReturn from './pages/SalesReturn';
+import PurchaseReturn from './pages/PurchaseReturn';
 
 export default function App() {
   return (
@@ -207,6 +210,36 @@ export default function App() {
             element={
               <ProtectedRoute adminOnly>
                 <StockValuation />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Barcode / QR Labels — Admin only */}
+          <Route
+            path="/barcode-labels"
+            element={
+              <ProtectedRoute adminOnly>
+                <BarcodeLabels />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Sales Return */}
+          <Route
+            path="/sales-return"
+            element={
+              <ProtectedRoute adminOnly>
+                <SalesReturn />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Purchase Return */}
+          <Route
+            path="/purchase-return"
+            element={
+              <ProtectedRoute adminOnly>
+                <PurchaseReturn />
               </ProtectedRoute>
             }
           />

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getDailyExpenses, createDailyExpense, updateDailyExpense, deleteDailyExpense,
   getExpenseCategories, createExpenseCategory, updateExpenseCategory, deleteExpenseCategory,
-  getQueuedByUrl, getEmployees } from '../api/client';
+  getQueuedByUrl, getEmployees,
+  getExpensePayments, addExpensePayment, deleteExpensePayment } from '../api/client';
 import OfflineBanner from '../components/OfflineBanner';
 
 const B = {
@@ -78,6 +80,68 @@ export default function DailyExpenses() {
   const [toast, setToast] = useState(null);
   const showToast = (msg, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); };
 
+  // Payment history drawer
+  const [histDrawer,    setHistDrawer]    = useState(null);  // null | expense object
+  const [histPayments,  setHistPayments]  = useState([]);
+  const [histLoading,   setHistLoading]   = useState(false);
+  const [histErr,       setHistErr]       = useState('');
+  const [payForm,       setPayForm]       = useState({ amount: '', payment_mode: 'cash', paid_on: today(), note: '' });
+  const [payFormErr,    setPayFormErr]    = useState('');
+  const [paySaving,     setPaySaving]     = useState(false);
+  useEscClose(() => setHistDrawer(null), !!histDrawer);
+
+  const openHistDrawer = async (expense) => {
+    setHistDrawer(expense);
+    setHistPayments([]);
+    setHistErr('');
+    setPayForm({ amount: '', payment_mode: 'cash', paid_on: today(), note: '' });
+    setPayFormErr('');
+    setHistLoading(true);
+    try {
+      const res = await getExpensePayments(expense.id);
+      setHistPayments(res.data.payments || []);
+    } catch { setHistErr('Failed to load payment history.'); }
+    finally { setHistLoading(false); }
+  };
+
+  const handleAddPayment = async (e) => {
+    e.preventDefault();
+    if (!payForm.amount || parseFloat(payForm.amount) <= 0) {
+      setPayFormErr('Enter a valid amount.'); return;
+    }
+    setPaySaving(true); setPayFormErr('');
+    try {
+      const res = await addExpensePayment(histDrawer.id, {
+        amount:       parseFloat(payForm.amount),
+        payment_mode: payForm.payment_mode,
+        paid_on:      payForm.paid_on || null,
+        note:         payForm.note,
+      });
+      // Refresh history list and update drawer expense object
+      setHistPayments(prev => [...prev, res.data.payment]);
+      setHistDrawer(res.data.expense);
+      setPayForm(f => ({ ...f, amount: '', note: '' }));
+      // Update the main expenses list in-place so table refreshes immediately
+      setExpenses(prev => prev.map(ex => ex.id === res.data.expense.id ? res.data.expense : ex));
+      showToast('Payment recorded!');
+    } catch (err) {
+      setPayFormErr(err.response?.data?.detail || 'Failed to save payment.');
+    } finally { setPaySaving(false); }
+  };
+
+  const handleDeletePayment = async (payId) => {
+    if (!window.confirm('Delete this payment record?')) return;
+    try {
+      const res = await deleteExpensePayment(histDrawer.id, payId);
+      setHistPayments(prev => prev.filter(p => p.id !== payId));
+      setHistDrawer(res.data.expense);
+      setExpenses(prev => prev.map(ex => ex.id === res.data.expense.id ? res.data.expense : ex));
+      showToast('Payment deleted.');
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Delete failed.', false);
+    }
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -136,6 +200,7 @@ export default function DailyExpenses() {
     setEditId(e.id); setFormErr(''); setModal('edit');
   };
   const closeModal = () => { setModal(null); setEditId(null); };
+  useEscClose(closeModal, !!modal);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -227,6 +292,7 @@ export default function DailyExpenses() {
     setEditCatId(c.id); setCatErr(''); setCatModal('edit');
   };
   const closeCatModal = () => { setCatModal(null); setEditCatId(null); };
+  useEscClose(closeCatModal, !!catModal);
   const handleCatChange = (e) => setCatForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
   const handleCatSubmit = async (ev) => {
@@ -660,6 +726,12 @@ export default function DailyExpenses() {
                                 Unpaid
                               </button>
                             )}
+                            <button onClick={() => openHistDrawer(e)}
+                              title="Payment history"
+                              className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                              style={{ background: '#f3e8ff', color: '#7c3aed' }}>
+                              ₹ History
+                            </button>
                             <button onClick={() => openEdit(e)}
                               className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
                               style={{ background: '#dbeafe', color: '#1d4ed8' }}>
@@ -1107,6 +1179,165 @@ export default function DailyExpenses() {
                 </div>
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Payment History Drawer ─────────────────────────────────────────── */}
+      {histDrawer && (
+        <div className="fixed inset-0 z-50 flex justify-end" style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={(ev) => { if (ev.target === ev.currentTarget) setHistDrawer(null); }}>
+          <div className="h-full w-full max-w-md flex flex-col shadow-2xl"
+            style={{ background: '#fdf6e3', borderLeft: `3px solid #d4a017` }}>
+
+            {/* Drawer header */}
+            <div className="px-5 py-4 flex items-start justify-between"
+              style={{ background: 'linear-gradient(135deg,#2d1a0e,#4a2c0a)', borderBottom: '2px solid #d4a017' }}>
+              <div>
+                <h2 className="font-extrabold text-base tracking-wide" style={{ color: '#f5c842' }}>
+                  Payment History
+                </h2>
+                <p className="text-xs mt-0.5 font-semibold line-clamp-1" style={{ color: '#d4a017' }}>
+                  {histDrawer.description || histDrawer.category}
+                </p>
+              </div>
+              <button onClick={() => setHistDrawer(null)}
+                className="text-xl font-bold leading-none active:scale-95"
+                style={{ color: '#f5c842' }}>✕</button>
+            </div>
+
+            {/* Expense summary bar */}
+            <div className="grid grid-cols-3 gap-px" style={{ background: '#e8d5a3' }}>
+              {[
+                { label: 'Bill Amount',  val: fmtINR(histDrawer.amount),           bg: '#fff9ee', color: '#3d2008' },
+                { label: 'Paid So Far',  val: fmtINR(histDrawer.paid_amount),       bg: '#f0fdf4', color: '#15803d' },
+                { label: 'Remaining',    val: fmtINR(histDrawer.remaining_amount),  bg: '#fef2f2', color: '#dc2626' },
+              ].map(({ label, val, bg, color }) => (
+                <div key={label} className="px-3 py-2 text-center" style={{ background: bg }}>
+                  <p className="text-xs font-bold uppercase tracking-wide" style={{ color: '#7a4e08' }}>{label}</p>
+                  <p className="text-sm font-extrabold mt-0.5" style={{ color }}>{val}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Scrollable history list */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+              {histLoading ? (
+                <div className="flex justify-center py-10">
+                  <div className="w-8 h-8 rounded-full border-4 animate-spin"
+                    style={{ borderColor: '#d4a017', borderTopColor: 'transparent' }} />
+                </div>
+              ) : histErr ? (
+                <p className="text-sm text-center py-6" style={{ color: '#dc2626' }}>{histErr}</p>
+              ) : histPayments.length === 0 ? (
+                <div className="text-center py-10">
+                  <p className="text-3xl mb-2">💰</p>
+                  <p className="text-sm font-semibold" style={{ color: '#a07020' }}>No payments recorded yet</p>
+                  <p className="text-xs mt-1" style={{ color: '#a07020' }}>Use the form below to add the first payment</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs font-bold uppercase tracking-widest pb-1" style={{ color: '#a07020', borderBottom: '1px solid #e8d5a3' }}>
+                    {histPayments.length} instalment{histPayments.length !== 1 ? 's' : ''}
+                  </p>
+                  {histPayments.map((p, idx) => (
+                    <div key={p.id} className="rounded-xl px-4 py-3 flex items-start justify-between gap-3"
+                      style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-extrabold" style={{ color: '#15803d' }}>
+                            {fmtINR(p.amount)}
+                          </span>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full uppercase"
+                            style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }}>
+                            {p.payment_mode}
+                          </span>
+                          <span className="text-xs" style={{ color: '#6b7280' }}>#{idx + 1}</span>
+                        </div>
+                        <p className="text-xs mt-1" style={{ color: '#6b7280' }}>
+                          📅 {p.paid_on} {p.recorded_by ? `· by ${p.recorded_by}` : ''}
+                        </p>
+                        {p.note && (
+                          <p className="text-xs mt-0.5 italic" style={{ color: '#7a4e08' }}>{p.note}</p>
+                        )}
+                      </div>
+                      <button onClick={() => handleDeletePayment(p.id)}
+                        className="text-xs font-bold px-2 py-1 rounded-lg flex-shrink-0 active:scale-95"
+                        style={{ background: '#fee2e2', color: '#dc2626' }}>
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+
+            {/* Add new payment form — only if there's still a remaining balance */}
+            {parseFloat(histDrawer.remaining_amount || 0) > 0 && (
+              <div className="px-4 py-4" style={{ borderTop: '2px solid #e8d5a3', background: '#fff9ee' }}>
+                <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#a07020' }}>
+                  Add Instalment · Remaining: <span style={{ color: '#dc2626' }}>{fmtINR(histDrawer.remaining_amount)}</span>
+                </p>
+                <form onSubmit={handleAddPayment} className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-bold block mb-1" style={{ color: '#7a4e08' }}>Amount *</label>
+                      <input type="number" min="0.01" step="0.01"
+                        max={parseFloat(histDrawer.remaining_amount)}
+                        value={payForm.amount}
+                        onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))}
+                        placeholder={`Max ${fmtINR(histDrawer.remaining_amount)}`}
+                        className="w-full text-sm px-3 py-2 rounded-xl outline-none border-2"
+                        style={{ borderColor: '#d4a017', background: '#fff' }} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold block mb-1" style={{ color: '#7a4e08' }}>Date</label>
+                      <input type="date" value={payForm.paid_on}
+                        onChange={e => setPayForm(f => ({ ...f, paid_on: e.target.value }))}
+                        className="w-full text-sm px-3 py-2 rounded-xl outline-none border-2"
+                        style={{ borderColor: '#d4a017', background: '#fff' }} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-bold block mb-1" style={{ color: '#7a4e08' }}>Mode</label>
+                      <select value={payForm.payment_mode}
+                        onChange={e => setPayForm(f => ({ ...f, payment_mode: e.target.value }))}
+                        className="w-full text-sm px-3 py-2 rounded-xl outline-none border-2"
+                        style={{ borderColor: '#d4a017', background: '#fff' }}>
+                        {['cash','upi','card','bank_transfer','cheque','other'].map(m => (
+                          <option key={m} value={m}>{m.replace('_', ' ').toUpperCase()}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold block mb-1" style={{ color: '#7a4e08' }}>Note</label>
+                      <input type="text" value={payForm.note}
+                        onChange={e => setPayForm(f => ({ ...f, note: e.target.value }))}
+                        placeholder="Optional note"
+                        className="w-full text-sm px-3 py-2 rounded-xl outline-none border-2"
+                        style={{ borderColor: '#d4a017', background: '#fff' }} />
+                    </div>
+                  </div>
+                  {payFormErr && (
+                    <p className="text-xs font-semibold" style={{ color: '#dc2626' }}>{payFormErr}</p>
+                  )}
+                  <button type="submit" disabled={paySaving}
+                    className="w-full py-2.5 rounded-xl font-extrabold text-sm active:scale-95 disabled:opacity-60"
+                    style={{ background: 'linear-gradient(135deg,#b8860b,#d4a017,#f5c842,#d4a017,#b8860b)', color: '#2d1a0e' }}>
+                    {paySaving ? 'Saving…' : '+ Record Payment'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* Fully paid footer */}
+            {parseFloat(histDrawer.remaining_amount || 0) <= 0 && (
+              <div className="px-4 py-3 text-center" style={{ borderTop: '2px solid #bbf7d0', background: '#f0fdf4' }}>
+                <p className="text-sm font-extrabold" style={{ color: '#15803d' }}>✓ Fully Paid</p>
+                <p className="text-xs mt-0.5" style={{ color: '#166534' }}>All instalments settled</p>
+              </div>
+            )}
           </div>
         </div>
       )}
