@@ -24,8 +24,10 @@ function QRCanvas({ text, size = 120 }) {
     try {
       const matrix = generateQR(text);
       const n = matrix.length;
-      const scale = Math.floor(size / n);
-      const side = scale * n;
+      const quiet = 4;                       // required quiet zone in modules
+      const total = n + quiet * 2;
+      const scale = Math.max(2, Math.floor(size / total));
+      const side = scale * total;
       canvas.width  = side;
       canvas.height = side;
       const ctx = canvas.getContext('2d');
@@ -34,7 +36,7 @@ function QRCanvas({ text, size = 120 }) {
       ctx.fillStyle = '#000';
       for (let r = 0; r < n; r++) {
         for (let c = 0; c < n; c++) {
-          if (matrix[r][c]) ctx.fillRect(c * scale, r * scale, scale, scale);
+          if (matrix[r][c]) ctx.fillRect((c + quiet) * scale, (r + quiet) * scale, scale, scale);
         }
       }
     } catch {

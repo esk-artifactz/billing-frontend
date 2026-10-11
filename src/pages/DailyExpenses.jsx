@@ -90,6 +90,68 @@ export default function DailyExpenses() {
   const [paySaving,     setPaySaving]     = useState(false);
   useEscClose(() => setHistDrawer(null), !!histDrawer);
 
+  // Inline payment-status update modal
+  const [statusModal,    setStatusModal]    = useState(null); // null | expense object
+  const [statusForm,     setStatusForm]     = useState({ paid_amount: '', comment: '' });
+  const [statusSaving,   setStatusSaving]   = useState(false);
+  const [statusErr,      setStatusErr]      = useState('');
+  useEscClose(() => setStatusModal(null), !!statusModal);
+
+  // Inline amount edit (directly in table row)
+  const [inlineEditId,   setInlineEditId]   = useState(null); // expense id being edited
+  const [inlineAmount,   setInlineAmount]   = useState('');
+  const [inlineSaving,   setInlineSaving]   = useState(false);
+
+  const startInlineEdit = (e) => { setInlineEditId(e.id); setInlineAmount(String(e.amount)); };
+  const cancelInlineEdit = () => { setInlineEditId(null); setInlineAmount(''); };
+  const saveInlineAmount = async (e) => {
+    const newAmt = parseFloat(inlineAmount);
+    if (!inlineAmount || isNaN(newAmt) || newAmt <= 0) return;
+    setInlineSaving(true);
+    try {
+      await updateDailyExpense(e.id, { amount: newAmt });
+      setInlineEditId(null);
+      setInlineAmount('');
+      load();
+      showToast('Amount updated!');
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to update amount.', false);
+    } finally { setInlineSaving(false); }
+  };
+
+  const openStatusModal = (expense) => {
+    const amt  = parseFloat(expense.amount || 0);
+    const paid = parseFloat(expense.paid_amount || 0);
+    const rem  = parseFloat(expense.remaining_amount || 0);
+    // Pre-select mode
+    let modeKey = 'full';
+    if (rem <= 0)         modeKey = 'full';
+    else if (paid > 0)   modeKey = 'partial';
+    else                 modeKey = 'unpaid';
+    setStatusForm({ paid_amount: String(paid), comment: expense.notes || '', modeKey });
+    setStatusErr('');
+    setStatusModal(expense);
+  };
+
+  const handleStatusSave = async () => {
+    const amt    = parseFloat(statusModal.amount || 0);
+    const pa     = parseFloat(statusForm.paid_amount) || 0;
+    if (pa > amt) { setStatusErr('Paid amount cannot exceed total.'); return; }
+    setStatusSaving(true); setStatusErr('');
+    try {
+      const res = await updateDailyExpense(statusModal.id, {
+        paid_amount: pa,
+        notes: statusForm.comment || undefined,
+      });
+      setExpenses(prev => prev.map(ex => ex.id === statusModal.id ? (res.data?.expense || ex) : ex));
+      load();
+      setStatusModal(null);
+      showToast('Payment status updated!');
+    } catch (err) {
+      setStatusErr(err.response?.data?.detail || 'Failed to update.');
+    } finally { setStatusSaving(false); }
+  };
+
   const openHistDrawer = async (expense) => {
     setHistDrawer(expense);
     setHistPayments([]);
@@ -343,6 +405,20 @@ export default function DailyExpenses() {
       return acc;
     }, {});
 
+  // Group total amount by "Paid To" — expenses only (advances/payouts already have paid_to on them)
+  const PAID_TO_COLORS = ['#d97706','#0ea5e9','#7c3aed','#16a34a','#dc2626','#f59e0b','#06b6d4','#be185d','#64748b','#10b981'];
+  const byPaidTo = [...expenses,
+    ...(showAdvances ? [
+      ...advances.map(a => ({ paid_to: a.employee_name || 'Advance', amount: a.amount })),
+      ...payouts.map(p  => ({ paid_to: p.employee_name || 'Salary',  amount: p.amount  })),
+    ] : [])]
+    .filter(e => e.paid_to && e.paid_to.trim())
+    .reduce((acc, e) => {
+      const key = e.paid_to.trim();
+      acc[key] = (acc[key] || 0) + parseFloat(e.amount || 0);
+      return acc;
+    }, {});
+
   return (
     <div className="min-h-screen" style={{ background: `linear-gradient(160deg, ${B.cream} 0%, ${B.creamMid} 60%, #ede0c4 100%)` }}>
 
@@ -496,6 +572,72 @@ export default function DailyExpenses() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* Paid-To grouped summary table */}
+        {!loading && Object.keys(byPaidTo).length > 0 && (
+          <div className="rounded-2xl shadow-sm overflow-hidden" style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
+            <div className="px-4 py-3 flex items-center justify-between"
+              style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: B.goldLight }}>
+                Amount by Paid To
+              </p>
+              <p className="text-xs font-semibold" style={{ color: '#c8a84b' }}>
+                {Object.keys(byPaidTo).length} recipient{Object.keys(byPaidTo).length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ background: '#fff9ee', borderBottom: '1px solid #e8d5a3' }}>
+                    <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider" style={{ color: B.textLight }}>Paid To</th>
+                    <th className="px-4 py-2 text-right text-xs font-bold uppercase tracking-wider" style={{ color: B.textLight }}>Total Amount</th>
+                    <th className="px-4 py-2 text-right text-xs font-bold uppercase tracking-wider" style={{ color: B.textLight }}>% of Day</th>
+                    <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider" style={{ color: B.textLight }}>Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(byPaidTo).sort((a, b) => b[1] - a[1]).map(([name, amt], idx) => {
+                    const dotColor = PAID_TO_COLORS[idx % PAID_TO_COLORS.length];
+                    const dayTotal = total + advShownTotal + payShownTotal;
+                    const pct = dayTotal > 0 ? (amt / dayTotal) * 100 : 0;
+                    return (
+                      <tr key={name} style={{ borderBottom: '1px solid #f0e0c0', background: idx % 2 === 0 ? '#fff' : '#fffbf2' }}>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: dotColor }} />
+                            <span className="font-semibold text-sm" style={{ color: B.darkBrown }}>{name}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-extrabold" style={{ color: B.brown }}>
+                          {fmtINR(amt)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-xs font-bold" style={{ color: B.textLight }}>
+                          {pct.toFixed(1)}%
+                        </td>
+                        <td className="px-4 py-2.5 min-w-[120px]">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: '#f0e0c0' }}>
+                              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: dotColor, transition: 'width 0.4s' }} />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: '#fff9ee', borderTop: `2px solid ${B.gold}` }}>
+                    <td className="px-4 py-2.5 text-sm font-bold" style={{ color: B.text }}>Total</td>
+                    <td className="px-4 py-2.5 text-right font-extrabold text-base" style={{ color: B.brown }}>
+                      {fmtINR(Object.values(byPaidTo).reduce((s, v) => s + v, 0))}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         )}
@@ -666,10 +808,45 @@ export default function DailyExpenses() {
                         </td>
                         <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{e.paid_to || '—'}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="font-extrabold" style={{ color: B.brown }}>{fmtINR(e.amount)}</div>
-                          {parseFloat(e.remaining_amount) > 0 && (
-                            <div className="text-xs font-semibold mt-0.5" style={{ color: '#dc2626' }}>
-                              Paid {fmtINR(e.paid_amount)}
+                          {inlineEditId === e.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number" min="0.01" step="0.01"
+                                value={inlineAmount}
+                                onChange={ev => setInlineAmount(ev.target.value)}
+                                onKeyDown={ev => { if (ev.key === 'Enter') saveInlineAmount(e); if (ev.key === 'Escape') cancelInlineEdit(); }}
+                                autoFocus
+                                className="w-24 border-2 rounded-lg px-2 py-1 text-xs font-bold outline-none"
+                                style={{ borderColor: B.gold, color: B.brown }}
+                              />
+                              <button onClick={() => saveInlineAmount(e)} disabled={inlineSaving}
+                                className="text-xs font-bold px-2 py-1 rounded-lg active:scale-95 disabled:opacity-50"
+                                style={{ background: '#dcfce7', color: '#16a34a' }}>
+                                {inlineSaving ? '…' : '✓'}
+                              </button>
+                              <button onClick={cancelInlineEdit}
+                                className="text-xs font-bold px-2 py-1 rounded-lg active:scale-95"
+                                style={{ background: '#fee2e2', color: '#dc2626' }}>
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 group">
+                              <div>
+                                <div className="font-extrabold" style={{ color: B.brown }}>{fmtINR(e.amount)}</div>
+                                {parseFloat(e.remaining_amount) > 0 && (
+                                  <div className="text-xs font-semibold mt-0.5" style={{ color: '#dc2626' }}>
+                                    Paid {fmtINR(e.paid_amount)}
+                                  </div>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => startInlineEdit(e)}
+                                title="Edit amount"
+                                className="opacity-0 group-hover:opacity-100 ml-1 text-xs px-1.5 py-0.5 rounded transition-opacity"
+                                style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}>
+                                ✎
+                              </button>
                             </div>
                           )}
                         </td>
@@ -726,6 +903,12 @@ export default function DailyExpenses() {
                                 Unpaid
                               </button>
                             )}
+                            <button onClick={() => openStatusModal(e)}
+                              title="Update payment status"
+                              className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                              style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}>
+                              ✎ Status
+                            </button>
                             <button onClick={() => openHistDrawer(e)}
                               title="Payment history"
                               className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
@@ -1100,6 +1283,124 @@ export default function DailyExpenses() {
           </div>
         </div>
       )}
+
+      {/* ── Inline Payment Status Modal ─────────────────────────────────────── */}
+      {statusModal && (() => {
+        const totalAmt = parseFloat(statusModal.amount || 0);
+        const curPaid  = parseFloat(statusForm.paid_amount) || 0;
+        const modeKey  = curPaid >= totalAmt && totalAmt > 0 ? 'full'
+                       : curPaid > 0 ? 'partial' : 'unpaid';
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+            style={{ background: 'rgba(45,26,14,0.6)' }}
+            onClick={ev => { if (ev.target === ev.currentTarget) setStatusModal(null); }}>
+            <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden"
+              style={{ background: '#fff', border: `2px solid ${B.gold}` }}>
+              <div className="h-1" style={{ background: `linear-gradient(90deg,#b8860b,${B.goldLight},#b8860b)` }} />
+              <div className="p-5 space-y-4">
+                <div>
+                  <h3 className="text-base font-extrabold" style={{ color: B.brown }}>Update Payment Status</h3>
+                  <p className="text-xs mt-0.5 truncate" style={{ color: B.textLight }}>
+                    {statusModal.description}
+                    {statusModal.paid_to ? ` · ${statusModal.paid_to}` : ''}
+                  </p>
+                </div>
+
+                {/* Amount info */}
+                <div className="rounded-xl px-3 py-2 flex gap-4"
+                  style={{ background: '#fff9ee', border: '1px solid #e8d5a3' }}>
+                  <div>
+                    <p className="text-xs text-gray-400">Total</p>
+                    <p className="font-extrabold text-sm" style={{ color: B.brown }}>{fmtINR(totalAmt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Remaining</p>
+                    <p className="font-extrabold text-sm" style={{ color: parseFloat(statusModal.remaining_amount) > 0 ? '#dc2626' : '#16a34a' }}>
+                      {fmtINR(statusModal.remaining_amount || 0)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Status selector */}
+                <div>
+                  <p className="text-xs font-bold mb-2" style={{ color: B.brown }}>Payment Status</p>
+                  <div className="flex gap-2">
+                    {[
+                      { key: 'full',    label: '✓ Fully Paid', bg: '#16a34a', fg: '#f0fdf4', border: '#16a34a' },
+                      { key: 'partial', label: '⚡ Partial',   bg: '#f59e0b', fg: '#fffbeb', border: '#fcd34d' },
+                      { key: 'unpaid',  label: '✗ Unpaid',     bg: '#dc2626', fg: '#fef2f2', border: '#fca5a5' },
+                    ].map(opt => (
+                      <button key={opt.key} type="button"
+                        onClick={() => {
+                          if (opt.key === 'full')   setStatusForm(f => ({ ...f, paid_amount: String(totalAmt) }));
+                          if (opt.key === 'unpaid') setStatusForm(f => ({ ...f, paid_amount: '0' }));
+                          if (opt.key === 'partial') {
+                            // Keep existing partial value or blank for user input
+                            setStatusForm(f => ({
+                              ...f,
+                              paid_amount: (parseFloat(f.paid_amount) > 0 && parseFloat(f.paid_amount) < totalAmt)
+                                ? f.paid_amount : '',
+                            }));
+                          }
+                        }}
+                        className="flex-1 text-xs font-bold py-2 rounded-lg active:scale-95 transition-all"
+                        style={{
+                          background: modeKey === opt.key ? opt.bg : opt.fg,
+                          color:      modeKey === opt.key ? '#fff'  : opt.bg,
+                          border:     `1.5px solid ${opt.border}`,
+                        }}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Partial amount input */}
+                {modeKey === 'partial' && (
+                  <div>
+                    <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>Amount Paid (₹)</label>
+                    <input type="number" min="0.01" step="0.01" max={totalAmt}
+                      value={statusForm.paid_amount}
+                      onChange={e => setStatusForm(f => ({ ...f, paid_amount: e.target.value }))}
+                      className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none"
+                      style={{ borderColor: '#fcd34d' }}
+                      placeholder={`0.00 – ${totalAmt}`} />
+                  </div>
+                )}
+
+                {/* Comment */}
+                <div>
+                  <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>
+                    Comment <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <textarea rows={2}
+                    value={statusForm.comment}
+                    onChange={e => setStatusForm(f => ({ ...f, comment: e.target.value }))}
+                    className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none resize-none"
+                    style={{ borderColor: '#e8d5a3' }}
+                    placeholder="e.g. Paid via UPI on 9 Oct, ref #123…" />
+                </div>
+
+                {statusErr && (
+                  <p className="text-xs font-semibold px-3 py-2 rounded-lg"
+                    style={{ background: '#fee2e2', color: '#dc2626' }}>{statusErr}</p>
+                )}
+
+                <div className="flex gap-3 pt-1">
+                  <button type="button" onClick={() => setStatusModal(null)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+                    style={{ background: '#f5f5f5', color: '#555' }}>Cancel</button>
+                  <button type="button" disabled={statusSaving} onClick={handleStatusSave}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95 disabled:opacity-60"
+                    style={{ background: `linear-gradient(135deg,#b8860b,${B.gold},${B.goldLight})`, color: B.darkBrown }}>
+                    {statusSaving ? 'Saving…' : 'Save Status'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Category Modal ── */}
       {catModal && (

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getExpenseCategories, getExpenseReport } from '../api/client';
+import { getExpenseCategories, getExpenseReport, updateDailyExpense } from '../api/client';
 
 const B = {
   darkBrown: '#2d1a0e', midBrown: '#4a2c0a', brown: '#3d2008',
@@ -40,6 +40,28 @@ export default function ExpenseCategories() {
 
   const [toast, setToast] = useState(null);
   const showToast = (msg, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); };
+
+  // Inline amount edit in Transactions tab
+  const [inlineEditId,  setInlineEditId]  = useState(null);
+  const [inlineAmount,  setInlineAmount]  = useState('');
+  const [inlineSaving,  setInlineSaving]  = useState(false);
+
+  const startInlineEdit  = (e) => { setInlineEditId(e.id); setInlineAmount(String(e.amount)); };
+  const cancelInlineEdit = ()  => { setInlineEditId(null); setInlineAmount(''); };
+  const saveInlineAmount = async (e) => {
+    const newAmt = parseFloat(inlineAmount);
+    if (!inlineAmount || isNaN(newAmt) || newAmt <= 0) return;
+    setInlineSaving(true);
+    try {
+      await updateDailyExpense(e.id, { amount: newAmt });
+      setInlineEditId(null);
+      setInlineAmount('');
+      await loadReport();
+      showToast('Amount updated!');
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to update amount.', false);
+    } finally { setInlineSaving(false); }
+  };
 
   // ── Load categories for filter ────────────────────────────────────────────
   const loadCats = useCallback(async () => {
@@ -283,42 +305,89 @@ export default function ExpenseCategories() {
               </div>
             )}
 
-            {/* By Supplier */}
-            {reportView === 'supplier' && (
-              <div className="rounded-2xl shadow-sm overflow-hidden"
-                style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
-                <div className="px-5 py-3 border-b" style={{ background: '#fffbf2', borderColor: '#e8d5a3' }}>
-                  <h3 className="font-bold text-sm" style={{ color: B.text }}>Spending by Supplier / Vendor</h3>
-                </div>
-                {report.by_supplier.length === 0 ? (
-                  <p className="text-center py-10 text-sm" style={{ color: B.textLight }}>No "Paid To" data for selected period.</p>
-                ) : (
-                  <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
-                          {['#', 'Supplier / Vendor', 'Entries', 'Total Paid'].map(h => (
-                            <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
-                              style={{ color: B.goldLight }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {report.by_supplier.map((s, idx) => (
-                          <tr key={s.paid_to}
-                            style={{ background: idx % 2 === 0 ? '#fff' : '#fffbf2', borderBottom: '1px solid #f0e0c0' }}>
-                            <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{idx + 1}</td>
-                            <td className="px-4 py-3 font-semibold" style={{ color: B.darkBrown }}>{s.paid_to}</td>
-                            <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{s.count}</td>
-                            <td className="px-4 py-3 font-extrabold" style={{ color: B.brown }}>{fmtINR(s.total)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+            {/* By Paid To (Supplier / Vendor) */}
+            {reportView === 'supplier' && (() => {
+              const PAID_TO_COLORS = ['#d97706','#0ea5e9','#7c3aed','#16a34a','#dc2626','#f59e0b','#06b6d4','#be185d','#64748b','#10b981'];
+              const supplierTotal  = report.by_supplier.reduce((s, r) => s + r.total, 0);
+              return (
+                <div className="rounded-2xl shadow-sm overflow-hidden"
+                  style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
+                  <div className="px-5 py-3 flex items-center justify-between"
+                    style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
+                    <h3 className="font-bold text-sm" style={{ color: B.goldLight }}>Amount by Paid To</h3>
+                    <span className="text-xs font-semibold" style={{ color: '#c8a84b' }}>
+                      {report.by_supplier.length} recipient{report.by_supplier.length !== 1 ? 's' : ''}
+                    </span>
                   </div>
-                )}
-              </div>
-            )}
+                  {report.by_supplier.length === 0 ? (
+                    <p className="text-center py-10 text-sm" style={{ color: B.textLight }}>No "Paid To" data for selected period.</p>
+                  ) : (
+                    <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr style={{ background: '#fff9ee', borderBottom: '1px solid #e8d5a3' }}>
+                            {['#', 'Paid To', 'Entries', 'Total Amount', '% of Total', 'Share'].map(h => (
+                              <th key={h} className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
+                                style={{ color: B.textLight }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {report.by_supplier.map((s, idx) => {
+                            const dotColor = PAID_TO_COLORS[idx % PAID_TO_COLORS.length];
+                            const pct = supplierTotal > 0 ? (s.total / supplierTotal) * 100 : 0;
+                            return (
+                              <tr key={s.paid_to}
+                                style={{ background: idx % 2 === 0 ? '#fff' : '#fffbf2', borderBottom: '1px solid #f0e0c0' }}>
+                                <td className="px-4 py-3 text-xs font-bold" style={{ color: B.textLight }}>{idx + 1}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: dotColor }} />
+                                    <span className="font-semibold" style={{ color: B.darkBrown }}>{s.paid_to}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{s.count} entries</td>
+                                <td className="px-4 py-3 font-extrabold whitespace-nowrap" style={{ color: B.brown }}>
+                                  {fmtINR(s.total)}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                                    style={{ background: dotColor + '22', color: dotColor }}>
+                                    {pct.toFixed(1)}%
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 min-w-[140px]">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: '#f0e0c0' }}>
+                                      <div className="h-full rounded-full transition-all"
+                                        style={{ width: `${pct}%`, background: dotColor }} />
+                                    </div>
+                                    <span className="text-xs w-8 text-right" style={{ color: B.textLight }}>
+                                      {pct.toFixed(0)}%
+                                    </span>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr style={{ background: '#fff9ee', borderTop: `2px solid ${B.gold}` }}>
+                            <td colSpan={3} className="px-4 py-3 text-sm font-bold text-right" style={{ color: B.text }}>
+                              Grand Total:
+                            </td>
+                            <td className="px-4 py-3 font-extrabold text-base" style={{ color: B.brown }}>
+                              {fmtINR(supplierTotal)}
+                            </td>
+                            <td colSpan={2} />
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* By Mode */}
             {reportView === 'mode' && (
@@ -361,8 +430,8 @@ export default function ExpenseCategories() {
                 <div className="px-5 py-3 border-b flex items-center justify-between"
                   style={{ background: '#fffbf2', borderColor: '#e8d5a3' }}>
                   <h3 className="font-bold text-sm" style={{ color: B.text }}>
-                    Recent Transactions
-                    <span className="ml-2 text-xs font-normal text-gray-400">(latest 50)</span>
+                    Transactions
+                    <span className="ml-2 text-xs font-normal text-gray-400">(latest 50 · click ✎ to edit amount)</span>
                   </h3>
                   <button onClick={() => window.print()}
                     className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
@@ -375,7 +444,7 @@ export default function ExpenseCategories() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
-                          {['Date', 'Category', 'Description', 'Paid To', 'Mode', 'Amount'].map(h => (
+                          {['Date', 'Category', 'Description', 'Paid To', 'Mode', 'Status', 'Amount'].map(h => (
                             <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
                               style={{ color: B.goldLight }}>{h}</th>
                           ))}
@@ -383,8 +452,11 @@ export default function ExpenseCategories() {
                       </thead>
                       <tbody>
                         {report.recent.map((e, idx) => {
-                          const pm = PM_STYLE[e.payment_mode] || { bg: '#f5f5f5', color: '#555', label: e.payment_mode };
+                          const pm     = PM_STYLE[e.payment_mode] || { bg: '#f5f5f5', color: '#555', label: e.payment_mode };
                           const catObj = cats.find(c => c.name === e.category);
+                          const rem    = parseFloat(e.remaining_amount || 0);
+                          const paid   = parseFloat(e.paid_amount   || 0);
+                          const amt    = parseFloat(e.amount        || 0);
                           return (
                             <tr key={e.id}
                               style={{ background: idx % 2 === 0 ? '#fff' : '#fffbf2', borderBottom: '1px solid #f0e0c0' }}>
@@ -407,8 +479,60 @@ export default function ExpenseCategories() {
                                 <span className="text-xs font-bold px-2 py-0.5 rounded-full uppercase"
                                   style={{ background: pm.bg, color: pm.color }}>{pm.label}</span>
                               </td>
-                              <td className="px-4 py-2.5 font-extrabold whitespace-nowrap" style={{ color: B.brown }}>
-                                {fmtINR(e.amount)}
+                              {/* Payment status */}
+                              <td className="px-4 py-2.5 whitespace-nowrap">
+                                {rem <= 0 ? (
+                                  <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                                    style={{ background: '#dcfce7', color: '#16a34a' }}>Paid</span>
+                                ) : paid > 0 ? (
+                                  <div>
+                                    <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                                      style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fcd34d' }}>Partial</span>
+                                    <div className="text-xs mt-0.5" style={{ color: '#dc2626' }}>Due {fmtINR(rem)}</div>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                                    style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}>Unpaid</span>
+                                )}
+                              </td>
+                              {/* Amount — inline editable */}
+                              <td className="px-4 py-2.5 whitespace-nowrap">
+                                {inlineEditId === e.id ? (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number" min="0.01" step="0.01"
+                                      value={inlineAmount}
+                                      onChange={ev => setInlineAmount(ev.target.value)}
+                                      onKeyDown={ev => { if (ev.key === 'Enter') saveInlineAmount(e); if (ev.key === 'Escape') cancelInlineEdit(); }}
+                                      autoFocus
+                                      className="w-24 border-2 rounded-lg px-2 py-1 text-xs font-bold outline-none"
+                                      style={{ borderColor: B.gold, color: B.brown }}
+                                    />
+                                    <button onClick={() => saveInlineAmount(e)} disabled={inlineSaving}
+                                      className="text-xs font-bold px-2 py-1 rounded-lg active:scale-95 disabled:opacity-50"
+                                      style={{ background: '#dcfce7', color: '#16a34a' }}>
+                                      {inlineSaving ? '…' : '✓'}
+                                    </button>
+                                    <button onClick={cancelInlineEdit}
+                                      className="text-xs font-bold px-2 py-1 rounded-lg active:scale-95"
+                                      style={{ background: '#fee2e2', color: '#dc2626' }}>✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 group">
+                                    <div>
+                                      <div className="font-extrabold" style={{ color: B.brown }}>{fmtINR(amt)}</div>
+                                      {rem > 0 && (
+                                        <div className="text-xs" style={{ color: '#dc2626' }}>Paid {fmtINR(paid)}</div>
+                                      )}
+                                    </div>
+                                    <button onClick={() => startInlineEdit(e)}
+                                      title="Edit amount"
+                                      className="opacity-0 group-hover:opacity-100 ml-1 text-xs px-1.5 py-0.5 rounded transition-opacity"
+                                      style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}>
+                                      ✎
+                                    </button>
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           );
@@ -416,7 +540,7 @@ export default function ExpenseCategories() {
                       </tbody>
                       <tfoot>
                         <tr style={{ background: '#fff9ee', borderTop: `2px solid ${B.gold}` }}>
-                          <td colSpan={5} className="px-4 py-3 text-sm font-bold text-right" style={{ color: B.text }}>
+                          <td colSpan={6} className="px-4 py-3 text-sm font-bold text-right" style={{ color: B.text }}>
                             Total ({report.recent.length} shown):
                           </td>
                           <td className="px-4 py-3 font-extrabold" style={{ color: B.brown }}>
@@ -471,6 +595,97 @@ export default function ExpenseCategories() {
                 </div>
               ) : (
                 <>
+                  {/* ── Cumulative Due by Paid To ─────────────────── */}
+                  {(() => {
+                    const COLORS = ['#dc2626','#d97706','#7c3aed','#0ea5e9','#16a34a','#be185d','#06b6d4','#f59e0b','#64748b','#10b981'];
+                    // Group remaining_amount by paid_to
+                    const grouped = (report.unpaid_items || []).reduce((acc, e) => {
+                      const key = (e.paid_to || '').trim() || '(No Recipient)';
+                      if (!acc[key]) acc[key] = { due: 0, bill: 0, paid: 0, count: 0 };
+                      acc[key].due   += parseFloat(e.remaining_amount || 0);
+                      acc[key].bill  += parseFloat(e.amount || 0);
+                      acc[key].paid  += parseFloat(e.paid_amount || 0);
+                      acc[key].count += 1;
+                      return acc;
+                    }, {});
+                    const entries = Object.entries(grouped).sort((a, b) => b[1].due - a[1].due);
+                    if (entries.length === 0) return null;
+                    const maxDue = entries[0][1].due;
+                    return (
+                      <div className="rounded-xl overflow-hidden mb-1"
+                        style={{ border: '1.5px solid #fecaca' }}>
+                        <div className="px-4 py-2.5 flex items-center justify-between"
+                          style={{ background: '#fef2f2', borderBottom: '1px solid #fecaca' }}>
+                          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#7f1d1d' }}>
+                            Due by Paid To
+                          </p>
+                          <p className="text-xs font-semibold" style={{ color: '#ef4444' }}>
+                            {entries.length} recipient{entries.length !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr style={{ background: '#fff5f5', borderBottom: '1px solid #fecaca' }}>
+                              {['Paid To', 'Entries', 'Bill', 'Paid', 'Due', 'Share'].map(h => (
+                                <th key={h} className="px-3 py-2 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
+                                  style={{ color: '#9ca3af' }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {entries.map(([name, vals], idx) => {
+                              const dotColor = COLORS[idx % COLORS.length];
+                              const barPct   = maxDue > 0 ? (vals.due / maxDue) * 100 : 0;
+                              return (
+                                <tr key={name} style={{ borderBottom: '1px solid #fef2f2', background: idx % 2 === 0 ? '#fff' : '#fff9f9' }}>
+                                  <td className="px-3 py-2.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: dotColor }} />
+                                      <span className="font-semibold text-xs" style={{ color: '#1c1917' }}>{name}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-xs" style={{ color: '#9ca3af' }}>{vals.count}</td>
+                                  <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: '#374151' }}>{fmtINR(vals.bill)}</td>
+                                  <td className="px-3 py-2.5 text-xs font-semibold" style={{ color: '#16a34a' }}>{fmtINR(vals.paid)}</td>
+                                  <td className="px-3 py-2.5 font-extrabold text-xs whitespace-nowrap" style={{ color: '#dc2626' }}>
+                                    {fmtINR(vals.due)}
+                                  </td>
+                                  <td className="px-3 py-2.5 min-w-[90px]">
+                                    <div className="flex items-center gap-1.5">
+                                      <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: '#fecaca' }}>
+                                        <div className="h-full rounded-full transition-all"
+                                          style={{ width: `${barPct}%`, background: dotColor }} />
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr style={{ background: '#fef2f2', borderTop: '1.5px solid #fecaca' }}>
+                              <td className="px-3 py-2 text-xs font-bold" style={{ color: '#7f1d1d' }}>Total</td>
+                              <td className="px-3 py-2 text-xs" style={{ color: '#9ca3af' }}>
+                                {(report.unpaid_items || []).length}
+                              </td>
+                              <td className="px-3 py-2 text-xs font-bold" style={{ color: '#374151' }}>
+                                {fmtINR(entries.reduce((s, [, v]) => s + v.bill, 0))}
+                              </td>
+                              <td className="px-3 py-2 text-xs font-bold" style={{ color: '#16a34a' }}>
+                                {fmtINR(entries.reduce((s, [, v]) => s + v.paid, 0))}
+                              </td>
+                              <td className="px-3 py-2 font-extrabold text-xs" style={{ color: '#dc2626' }}>
+                                {fmtINR(report.unpaid_total)}
+                              </td>
+                              <td />
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    );
+                  })()}
+
+                  {/* ── Individual entries ─────────────────────────── */}
                   {(report.unpaid_items || []).map((e) => {
                     const remaining = parseFloat(e.remaining_amount ?? e.amount);
                     const paid      = parseFloat(e.paid_amount ?? 0);
