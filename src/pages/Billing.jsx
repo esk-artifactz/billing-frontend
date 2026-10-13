@@ -59,6 +59,9 @@ function Modal({ title, onClose, children, wide }) {
 function CheckoutModal({ cart, onClose, onSuccess }) {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [amountTendered, setAmountTendered] = useState('');
+  const [splitCash, setSplitCash] = useState('');
+  const [splitUpi,  setSplitUpi]  = useState('');
+  const [splitCard, setSplitCard] = useState('');
   const [discount, setDiscount]             = useState('');
   const [showDiscount, setShowDiscount]     = useState(false);
   const [parcel, setParcel]                 = useState('');
@@ -77,6 +80,24 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
   const tendered    = parseFloat(amountTendered) || 0;
   const change      = paymentMethod === 'cash' ? Math.max(0, tendered - grandTotal) : 0;
 
+  // Split payment math
+  const spCash    = parseFloat(splitCash) || 0;
+  const spUpi     = parseFloat(splitUpi)  || 0;
+  const spCard    = parseFloat(splitCard) || 0;
+  const spTotal   = spCash + spUpi + spCard;
+  const spRemain  = Math.round((grandTotal - spTotal) * 100) / 100;
+  const spValid   = spTotal > 0 && Math.abs(spRemain) < 0.01;
+  const updateSplit = (field, val) => {
+    if (field === 'cash') setSplitCash(val);
+    if (field === 'upi')  setSplitUpi(val);
+    if (field === 'card') setSplitCard(val);
+  };
+  const fillRemainder = (field) => {
+    const others = { cash: spCash, upi: spUpi, card: spCard };
+    const otherSum = spTotal - others[field];
+    updateSplit(field, String(Math.max(0, Math.round((grandTotal - otherSum) * 100) / 100)));
+  };
+
   const inputStyle = {
     background: '#fff9ee', border: `1.5px solid ${B.gold}`, color: B.brown,
     borderRadius: 12, padding: '10px 14px', width: '100%', fontSize: 14, outline: 'none',
@@ -84,9 +105,10 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
 
   const handleCheckout = async () => {
     if (paymentMethod === 'cash' && tendered < grandTotal) { setError('Amount tendered must be ≥ grand total'); return; }
+    if (paymentMethod === 'split' && !spValid) { setError(`Split amounts must add up to ₹${fmt(grandTotal)}`); return; }
     setLoading(true); setError('');
     try {
-      const res = await apiCheckout({
+      const payload = {
         items: cart.map(i => ({ product_id: i.id, quantity: i.quantity, discount_amount: 0 })),
         discount_total:  discountVal,
         parcel_charge:   parcelVal || undefined,
@@ -94,7 +116,14 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         amount_tendered: paymentMethod === 'cash' ? tendered : grandTotal,
         customer_name:   customerName.trim() || undefined,
         customer_mobile: customerMobile.trim() || undefined,
-      });
+      };
+      if (paymentMethod === 'split') {
+        payload.payment_splits = {};
+        if (spCash > 0) payload.payment_splits.cash = spCash;
+        if (spUpi  > 0) payload.payment_splits.upi  = spUpi;
+        if (spCard > 0) payload.payment_splits.card = spCard;
+      }
+      const res = await apiCheckout(payload);
       onSuccess(res.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'Checkout failed. Please try again.');
@@ -160,8 +189,8 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         {/* Payment method */}
         <div>
           <label className="block text-sm font-semibold mb-2" style={{ color: B.text }}>Payment Method</label>
-          <div className="grid grid-cols-3 gap-2">
-            {['cash', 'upi', 'card'].map(m => (
+          <div className="grid grid-cols-4 gap-2">
+            {['cash', 'upi', 'card', 'split'].map(m => (
               <button key={m} onClick={() => setPaymentMethod(m)}
                 className="py-3 rounded-xl text-sm font-bold capitalize transition-all active:scale-95"
                 style={paymentMethod === m
@@ -172,6 +201,43 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
             ))}
           </div>
         </div>
+
+        {/* Split payment inputs */}
+        {paymentMethod === 'split' && (
+          <div className="rounded-xl p-3 space-y-2" style={{ background: '#fff9ee', border: `1.5px dashed ${B.gold}` }}>
+            <p className="text-xs font-bold uppercase tracking-widest" style={{ color: B.textLight }}>
+              Split Bill — Cash + UPI / Card
+            </p>
+            {[
+              { key: 'cash', label: 'Cash (₹)',        val: splitCash, color: '#16a34a' },
+              { key: 'upi',  label: 'UPI (₹)',         val: splitUpi,  color: '#7c3aed' },
+              { key: 'card', label: 'Card (₹)',        val: splitCard, color: '#1d4ed8' },
+            ].map(row => (
+              <div key={row.key} className="flex items-center gap-2">
+                <label className="w-20 text-xs font-bold" style={{ color: row.color }}>{row.label}</label>
+                <input type="number" min="0" step="0.01" value={row.val}
+                  onChange={e => updateSplit(row.key, e.target.value)}
+                  placeholder="0.00"
+                  style={{ ...inputStyle, padding: '6px 10px', fontSize: 13 }} />
+                <button type="button" onClick={() => fillRemainder(row.key)}
+                  className="text-xs font-bold px-2 py-1.5 rounded-lg flex-shrink-0 active:scale-95"
+                  style={{ background: '#fff', border: `1px solid ${row.color}55`, color: row.color }}>
+                  Rest
+                </button>
+              </div>
+            ))}
+            {/* Running total + remainder */}
+            <div className="flex justify-between items-center pt-1 border-t" style={{ borderColor: '#e8d5a3' }}>
+              <span className="text-xs font-bold" style={{ color: B.text }}>
+                Collected: ₹{fmt(spTotal)}
+              </span>
+              <span className="text-xs font-extrabold"
+                style={{ color: spValid ? '#16a34a' : '#dc2626' }}>
+                {spValid ? '✓ Matches total' : `Remaining: ₹${fmt(spRemain)}`}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Tendered (cash only) */}
         {paymentMethod === 'cash' && (
@@ -203,8 +269,8 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
 
         {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
 
-        <button onClick={handleCheckout} disabled={loading}
-          className="w-full font-bold py-3.5 rounded-xl text-base uppercase tracking-wider transition-all active:scale-95"
+        <button onClick={handleCheckout} disabled={loading || (paymentMethod === 'split' && !spValid)}
+          className="w-full font-bold py-3.5 rounded-xl text-base uppercase tracking-wider transition-all active:scale-95 disabled:opacity-60"
           style={{ background: loading ? '#c8a84b' : B.goldGrad, color: B.brown, letterSpacing: '0.1em',
             boxShadow: '0 4px 15px rgba(180,130,10,0.35)' }}>
           {loading ? 'Processing...' : `Confirm Payment  ₹${fmt(grandTotal)}`}

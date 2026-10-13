@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { login } from '../api/client';
+import { login, requestCashierLogin, getCashierRequest } from '../api/client';
 
 export default function Login() {
   const { signIn } = useAuth();
@@ -10,6 +10,14 @@ export default function Login() {
   const [form, setForm]       = useState({ username: '', password: '' });
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Cashier approval flow
+  const [pendingReq, setPendingReq] = useState(null);  // {request_id, username}
+  const [reqStatus,  setReqStatus]  = useState(null);  // 'pending' | 'denied'
+  const pollRef = useRef(null);
+
+  const stopPolling = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+  useEffect(() => stopPolling, []);
 
   const handleChange = (e) =>
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -28,6 +36,37 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  // Cashier: raise an access request, then poll until admin approves/denies
+  const handleRequestAccess = async () => {
+    if (!form.username.trim()) { setError('Enter your username first.'); return; }
+    setError(''); setLoading(true);
+    try {
+      const res = await requestCashierLogin(form.username.trim());
+      setPendingReq({ request_id: res.data.request_id, username: form.username.trim() });
+      setReqStatus('pending');
+      stopPolling();
+      pollRef.current = setInterval(async () => {
+        try {
+          const st = await getCashierRequest(res.data.request_id);
+          if (st.data.status === 'approved') {
+            stopPolling();
+            signIn(st.data.user, st.data.token);
+            navigate('/dashboard');
+          } else if (st.data.status === 'denied') {
+            stopPolling();
+            setReqStatus('denied');
+          }
+        } catch { /* keep polling on transient errors */ }
+      }, 3000);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Could not raise access request.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelRequest = () => { stopPolling(); setPendingReq(null); setReqStatus(null); };
 
   return (
     <div
@@ -101,6 +140,39 @@ export default function Login() {
             </div>
           )}
 
+          {/* Cashier waiting state */}
+          {pendingReq && reqStatus === 'pending' && (
+            <div className="mb-4 border rounded-xl px-4 py-4 text-center space-y-2"
+              style={{ background: '#fff9ee', borderColor: '#d4a017' }}>
+              <div className="w-8 h-8 mx-auto rounded-full border-4 animate-spin"
+                style={{ borderColor: '#d4a017', borderTopColor: 'transparent' }} />
+              <p className="text-sm font-bold" style={{ color: '#7a4e08' }}>
+                Waiting for admin approval…
+              </p>
+              <p className="text-xs" style={{ color: '#a07020' }}>
+                Access request sent for <b>{pendingReq.username}</b>. This page will sign you in automatically once approved.
+              </p>
+              <button type="button" onClick={cancelRequest}
+                className="text-xs font-bold px-4 py-1.5 rounded-lg"
+                style={{ background: '#fee2e2', color: '#dc2626' }}>
+                Cancel request
+              </button>
+            </div>
+          )}
+          {reqStatus === 'denied' && (
+            <div className="mb-4 border rounded-xl px-4 py-3 text-center space-y-2"
+              style={{ background: '#fff0f0', borderColor: '#e57373' }}>
+              <p className="text-sm font-bold" style={{ color: '#c62828' }}>
+                Access request denied by admin
+              </p>
+              <button type="button" onClick={cancelRequest}
+                className="text-xs font-bold px-4 py-1.5 rounded-lg"
+                style={{ background: '#fff', color: '#c62828', border: '1px solid #e57373' }}>
+                Try again
+              </button>
+            </div>
+          )}
+
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -164,6 +236,31 @@ export default function Login() {
             >
               {loading ? 'Signing in...' : '👑 Sign In'}
             </button>
+
+            {/* Cashier approval request */}
+            <div className="pt-1">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex-1 h-px" style={{ background: '#e0c98a' }} />
+                <span className="text-xs font-semibold" style={{ color: '#a07020' }}>CASHIER?</span>
+                <div className="flex-1 h-px" style={{ background: '#e0c98a' }} />
+              </div>
+              <button
+                type="button"
+                onClick={handleRequestAccess}
+                disabled={loading || (pendingReq && reqStatus === 'pending')}
+                className="w-full py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 disabled:opacity-60"
+                style={{
+                  background: '#fff9ee',
+                  border: '1.5px dashed #d4a017',
+                  color: '#7a4e08',
+                }}
+              >
+                🙋 Request Access (no password needed)
+              </button>
+              <p className="text-xs text-center mt-1.5" style={{ color: '#b08d3e' }}>
+                Enter your username, tap Request Access — admin approval signs you in automatically.
+              </p>
+            </div>
           </form>
 
           {/* Footer */}

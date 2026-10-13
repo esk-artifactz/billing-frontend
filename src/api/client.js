@@ -99,6 +99,12 @@ export const checkout = (data) =>
 
 export const getReceipt = (invoiceNumber) => api.get(`/billing/receipt/${invoiceNumber}`);
 
+// Cashier login approval
+export const requestCashierLogin  = (username)     => api.post('/auth/cashier-request', { username });
+export const getCashierRequest    = (reqId)        => api.get(`/auth/cashier-request/${reqId}`);
+export const getLoginRequests     = ()             => api.get('/auth/login-requests');
+export const decideLoginRequest   = (reqId, action)=> api.post(`/auth/login-requests/${reqId}/decide`, { action });
+
 // Public menu card — no auth needed
 export const getMenu = () => api.get('/menu');
 
@@ -111,6 +117,7 @@ export const getHeldSale = (holdRef) => api.get(`/billing/held/${holdRef}`);
 export const deleteHeldSale = (holdRef) => api.delete(`/billing/held/${holdRef}`);
 
 export const getSalesHistory = (params = {}) => api.get('/billing/sales', { params });
+export const updateSale      = (saleId, data)    => api.put(`/billing/sales/${saleId}`, data);
 
 // ── Credit Bills ──────────────────────────────────────────────────────────────
 

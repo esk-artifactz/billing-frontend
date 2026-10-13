@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getSalesHistory, getReceipt } from '../api/client';
+import { getSalesHistory, getReceipt, updateSale } from '../api/client';
 import Receipt from '../components/Receipt';
 
 const B = {
@@ -12,9 +12,10 @@ const B = {
 };
 
 const PM_STYLE = {
-  cash: { bg: '#dcfce7', color: '#16a34a', label: 'Cash' },
-  upi:  { bg: '#ede9fe', color: '#7c3aed', label: 'UPI' },
-  card: { bg: '#dbeafe', color: '#1d4ed8', label: 'Card' },
+  cash:  { bg: '#dcfce7', color: '#16a34a', label: 'Cash' },
+  upi:   { bg: '#ede9fe', color: '#7c3aed', label: 'UPI' },
+  card:  { bg: '#dbeafe', color: '#1d4ed8', label: 'Card' },
+  split: { bg: '#fef3c7', color: '#b45309', label: 'Split' },
 };
 
 const fmtINR = (n) => `₹${parseFloat(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -37,6 +38,68 @@ export default function SalesHistory() {
 
   const [toast, setToast] = useState(null);
   const showToast = (msg, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); };
+
+  // ── Edit bill modal ─────────────────────────────────────────────────────
+  const [editSale,  setEditSale]  = useState(null);   // sale row being edited
+  const [editForm,  setEditForm]  = useState(null);
+  const [editSaving,setEditSaving]= useState(false);
+  const [editErr,   setEditErr]   = useState('');
+  useEscClose(() => setEditSale(null), !!editSale);
+
+  const openEdit = (s) => {
+    let splits = {};
+    try { splits = typeof s.payment_splits === 'string' ? JSON.parse(s.payment_splits) : (s.payment_splits || {}); } catch { splits = {}; }
+    setEditForm({
+      payment_method:  s.payment_method || 'cash',
+      amount_tendered: s.amount_tendered ?? '',
+      customer_name:   s.customer_name || '',
+      customer_mobile: s.customer_mobile || '',
+      discount_total:  s.discount_total ?? '',
+      parcel_charge:   s.parcel_charge ?? '',
+      split_cash: splits.cash ?? '',
+      split_upi:  splits.upi  ?? '',
+      split_card: splits.card ?? '',
+    });
+    setEditErr('');
+    setEditSale(s);
+  };
+
+  const saveEdit = async () => {
+    const discount = parseFloat(editForm.discount_total) || 0;
+    const parcel   = parseFloat(editForm.parcel_charge)  || 0;
+    const subtotal = parseFloat(editSale.subtotal || 0);
+    const tax      = parseFloat(editSale.tax_total || 0);
+    const newTotal = Math.round(subtotal - discount + tax + parcel);
+    const payload  = {
+      payment_method:  editForm.payment_method,
+      amount_tendered: editForm.amount_tendered === '' ? null : parseFloat(editForm.amount_tendered),
+      customer_name:   editForm.customer_name.trim() || null,
+      customer_mobile: editForm.customer_mobile.trim() || null,
+      discount_total:  discount,
+      parcel_charge:   parcel,
+    };
+    if (editForm.payment_method === 'split') {
+      const sp = {};
+      if (parseFloat(editForm.split_cash) > 0) sp.cash = parseFloat(editForm.split_cash);
+      if (parseFloat(editForm.split_upi)  > 0) sp.upi  = parseFloat(editForm.split_upi);
+      if (parseFloat(editForm.split_card) > 0) sp.card = parseFloat(editForm.split_card);
+      const spSum = Object.values(sp).reduce((a, b) => a + b, 0);
+      if (Math.abs(spSum - newTotal) >= 0.01) {
+        setEditErr(`Split amounts (₹${fmtINR(spSum)}) must equal new bill total (₹${fmtINR(newTotal)})`);
+        return;
+      }
+      payload.payment_splits = sp;
+    }
+    setEditSaving(true); setEditErr('');
+    try {
+      await updateSale(editSale.id, payload);
+      setEditSale(null);
+      showToast('Bill updated!');
+      load();
+    } catch (err) {
+      setEditErr(err.response?.data?.detail || 'Failed to update bill.');
+    } finally { setEditSaving(false); }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -155,6 +218,7 @@ export default function SalesHistory() {
               <option value="cash">Cash</option>
               <option value="upi">UPI</option>
               <option value="card">Card</option>
+              <option value="split">Split</option>
             </select>
           </div>
           <div className="flex gap-2">
@@ -232,12 +296,21 @@ export default function SalesHistory() {
                           {fmtINR(s.grand_total)}
                         </td>
                         <td className="px-4 py-3">
-                          <button onClick={() => viewBill(s.invoice_number)}
-                            disabled={loadingBill === s.invoice_number}
-                            className="text-xs font-bold px-4 py-1.5 rounded-lg active:scale-95 disabled:opacity-60"
-                            style={{ background: `linear-gradient(135deg,#b8860b,${B.gold})`, color: '#fff' }}>
-                            {loadingBill === s.invoice_number ? 'Loading…' : 'View Bill'}
-                          </button>
+                          <div className="flex gap-2">
+                            <button onClick={() => viewBill(s.invoice_number)}
+                              disabled={loadingBill === s.invoice_number}
+                              className="text-xs font-bold px-4 py-1.5 rounded-lg active:scale-95 disabled:opacity-60"
+                              style={{ background: `linear-gradient(135deg,#b8860b,${B.gold})`, color: '#fff' }}>
+                              {loadingBill === s.invoice_number ? 'Loading…' : 'View Bill'}
+                            </button>
+                            {!isCashier && (
+                              <button onClick={() => openEdit(s)}
+                                className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                                style={{ background: '#dbeafe', color: '#1d4ed8' }}>
+                                Edit
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -257,6 +330,153 @@ export default function SalesHistory() {
           )}
         </div>
       </div>
+
+      {/* ── Edit Bill modal ───────────────────────────────────────────────── */}
+      {editSale && editForm && (() => {
+        const inputStyle = {
+          background: '#fff9ee', border: `1.5px solid ${B.gold}`, color: B.brown,
+          borderRadius: 10, padding: '8px 12px', width: '100%', fontSize: 13, outline: 'none',
+        };
+        const discount = parseFloat(editForm.discount_total) || 0;
+        const parcel   = parseFloat(editForm.parcel_charge)  || 0;
+        const subtotal = parseFloat(editSale.subtotal || 0);
+        const tax      = parseFloat(editSale.tax_total || 0);
+        const newTotal = Math.round(subtotal - discount + tax + parcel);
+        const spSum    = (parseFloat(editForm.split_cash) || 0) +
+                         (parseFloat(editForm.split_upi)  || 0) +
+                         (parseFloat(editForm.split_card) || 0);
+        const spRemain = Math.round((newTotal - spSum) * 100) / 100;
+        const fillRest = (key) => {
+          const others = { split_cash: editForm.split_cash, split_upi: editForm.split_upi, split_card: editForm.split_card };
+          const otherSum = (parseFloat(others.split_cash) || 0) + (parseFloat(others.split_upi) || 0) + (parseFloat(others.split_card) || 0) - (parseFloat(others[key]) || 0);
+          setEditForm(f => ({ ...f, [key]: String(Math.max(0, Math.round((newTotal - otherSum) * 100) / 100)) }));
+        };
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+            style={{ background: 'rgba(45,26,14,0.6)' }}
+            onClick={ev => { if (ev.target === ev.currentTarget) setEditSale(null); }}>
+            <div className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
+              style={{ background: '#fff', border: `2px solid ${B.gold}` }}>
+              <div className="h-1 flex-shrink-0" style={{ background: `linear-gradient(90deg,#b8860b,${B.goldLight},#b8860b)` }} />
+              <div className="p-5 overflow-y-auto space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-extrabold" style={{ color: B.brown }}>Edit Bill</h3>
+                    <p className="text-xs font-mono" style={{ color: B.textLight }}>{editSale.invoice_number}</p>
+                  </div>
+                  <button onClick={() => setEditSale(null)} className="text-2xl font-bold leading-none" style={{ color: B.textLight }}>×</button>
+                </div>
+
+                {/* Payment method */}
+                <div>
+                  <label className="block text-xs font-bold mb-1.5" style={{ color: B.text }}>Payment Method</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {['cash', 'upi', 'card', 'split'].map(m => (
+                      <button key={m} type="button"
+                        onClick={() => setEditForm(f => ({ ...f, payment_method: m }))}
+                        className="py-2 rounded-lg text-xs font-bold capitalize active:scale-95"
+                        style={editForm.payment_method === m
+                          ? { background: `linear-gradient(135deg,#b8860b,${B.goldLight})`, color: B.darkBrown, border: `2px solid #b8860b` }
+                          : { background: '#fff9ee', color: B.text, border: `2px solid ${B.gold}` }}>
+                        {m === 'upi' ? 'UPI' : m.charAt(0).toUpperCase() + m.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Split inputs */}
+                {editForm.payment_method === 'split' && (
+                  <div className="rounded-xl p-3 space-y-2" style={{ background: '#fff9ee', border: `1.5px dashed ${B.gold}` }}>
+                    <p className="text-xs font-bold uppercase tracking-widest" style={{ color: B.textLight }}>Split Amounts</p>
+                    {[['split_cash','Cash','#16a34a'], ['split_upi','UPI','#7c3aed'], ['split_card','Card','#1d4ed8']].map(([k, lbl, c]) => (
+                      <div key={k} className="flex items-center gap-2">
+                        <label className="w-12 text-xs font-bold" style={{ color: c }}>{lbl}</label>
+                        <input type="number" min="0" step="0.01" value={editForm[k]}
+                          onChange={e => setEditForm(f => ({ ...f, [k]: e.target.value }))}
+                          style={{ ...inputStyle, padding: '5px 9px', fontSize: 12 }} />
+                        <button type="button" onClick={() => fillRest(k)}
+                          className="text-xs font-bold px-2 py-1 rounded-lg flex-shrink-0"
+                          style={{ background: '#fff', border: `1px solid ${c}55`, color: c }}>Rest</button>
+                      </div>
+                    ))}
+                    <div className="flex justify-between pt-1 border-t" style={{ borderColor: '#e8d5a3' }}>
+                      <span className="text-xs font-bold" style={{ color: B.text }}>Collected: {fmtINR(spSum)}</span>
+                      <span className="text-xs font-extrabold" style={{ color: Math.abs(spRemain) < 0.01 ? '#16a34a' : '#dc2626' }}>
+                        {Math.abs(spRemain) < 0.01 ? '✓ Matches total' : `Remaining: ${fmtINR(spRemain)}`}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tendered */}
+                <div>
+                  <label className="block text-xs font-bold mb-1" style={{ color: B.text }}>Amount Tendered (₹)</label>
+                  <input type="number" min="0" step="0.01" value={editForm.amount_tendered}
+                    onChange={e => setEditForm(f => ({ ...f, amount_tendered: e.target.value }))}
+                    placeholder={String(newTotal)} style={inputStyle} />
+                </div>
+
+                {/* Customer */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-bold mb-1" style={{ color: B.text }}>Customer Name</label>
+                    <input type="text" value={editForm.customer_name}
+                      onChange={e => setEditForm(f => ({ ...f, customer_name: e.target.value }))}
+                      style={inputStyle} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold mb-1" style={{ color: B.text }}>Mobile</label>
+                    <input type="tel" value={editForm.customer_mobile} maxLength={15}
+                      onChange={e => setEditForm(f => ({ ...f, customer_mobile: e.target.value }))}
+                      style={inputStyle} />
+                  </div>
+                </div>
+
+                {/* Discount + Parcel */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-bold mb-1" style={{ color: B.text }}>Discount (₹)</label>
+                    <input type="number" min="0" step="0.01" value={editForm.discount_total}
+                      onChange={e => setEditForm(f => ({ ...f, discount_total: e.target.value }))}
+                      style={inputStyle} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold mb-1" style={{ color: B.text }}>Parcel Charge (₹)</label>
+                    <input type="number" min="0" step="0.01" value={editForm.parcel_charge}
+                      onChange={e => setEditForm(f => ({ ...f, parcel_charge: e.target.value }))}
+                      style={inputStyle} />
+                  </div>
+                </div>
+
+                {/* New total preview */}
+                <div className="rounded-xl px-3 py-2.5 flex justify-between items-center"
+                  style={{ background: '#fff9ee', border: `1.5px solid ${B.gold}` }}>
+                  <span className="text-xs font-bold" style={{ color: B.textLight }}>
+                    New Bill Total {`(Subtotal ${fmtINR(subtotal)} − Discount + GST ${fmtINR(tax)} + Parcel)`}
+                  </span>
+                  <span className="font-extrabold" style={{ color: B.brown }}>{fmtINR(newTotal)}</span>
+                </div>
+
+                {editErr && (
+                  <p className="text-xs font-semibold px-3 py-2 rounded-lg"
+                    style={{ background: '#fee2e2', color: '#dc2626' }}>{editErr}</p>
+                )}
+
+                <div className="flex gap-3 pt-1">
+                  <button type="button" onClick={() => setEditSale(null)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+                    style={{ background: '#f5f5f5', color: '#555' }}>Cancel</button>
+                  <button type="button" onClick={saveEdit} disabled={editSaving}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95 disabled:opacity-60"
+                    style={{ background: `linear-gradient(135deg,#b8860b,${B.gold},${B.goldLight})`, color: B.darkBrown }}>
+                    {editSaving ? 'Saving…' : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Receipt modal — same printable bill as the POS */}
       {receiptData && (

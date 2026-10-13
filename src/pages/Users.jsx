@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getUsers, registerUser, updateUser } from '../api/client';
+import { getUsers, registerUser, updateUser, getLoginRequests, decideLoginRequest } from '../api/client';
 
 const B = {
   darkBrown: '#2d1a0e', midBrown: '#4a2c0a', brown: '#3d2008',
@@ -45,6 +45,36 @@ export default function Users() {
   }, [navigate, signOut]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  // ── Pending cashier login requests ───────────────────────────────────────
+  const [requests,  setRequests]  = useState([]);
+  const [reqBusy,   setReqBusy]   = useState(null);
+
+  const fetchRequests = useCallback(async () => {
+    try {
+      const res = await getLoginRequests();
+      setRequests(res.data.requests || []);
+    } catch { /* silent — non-critical */ }
+  }, []);
+
+  useEffect(() => {
+    fetchRequests();
+    const t = setInterval(fetchRequests, 10000);   // auto-refresh every 10s
+    return () => clearInterval(t);
+  }, [fetchRequests]);
+
+  const decide = async (req, action) => {
+    setReqBusy(req.id);
+    try {
+      await decideLoginRequest(req.id, action);
+      showToast(`Access ${action === 'approve' ? 'approved' : 'denied'} for ${req.username}`);
+      fetchRequests();
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Action failed.', false);
+    } finally { setReqBusy(null); }
+  };
+
+  const pendingReqs = requests.filter(r => r.status === 'pending');
 
   const openRegister = () => { setForm(EMPTY_FORM); setFormErr(''); setModal('register'); };
   const openEdit = (u) => {
@@ -165,6 +195,48 @@ export default function Users() {
             <p className="text-3xl font-extrabold" style={{ color: '#1d4ed8' }}>{cashierCount}</p>
           </div>
         </div>
+
+        {/* Pending cashier access requests */}
+        {pendingReqs.length > 0 && (
+          <div className="rounded-2xl shadow-sm overflow-hidden"
+            style={{ background: '#fff', border: '2px solid #f59e0b' }}>
+            <div className="px-5 py-3 flex items-center justify-between"
+              style={{ background: '#fffbeb', borderBottom: '1px solid #fcd34d' }}>
+              <h3 className="font-bold text-sm" style={{ color: '#92400e' }}>
+                🔔 Cashier Access Requests ({pendingReqs.length})
+              </h3>
+              <span className="text-xs font-semibold" style={{ color: '#b45309' }}>
+                Awaiting your approval
+              </span>
+            </div>
+            <div className="divide-y" style={{ borderColor: '#fef3c7' }}>
+              {pendingReqs.map(r => (
+                <div key={r.id} className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="font-semibold text-sm" style={{ color: B.darkBrown }}>{r.username}</p>
+                    <p className="text-xs" style={{ color: B.textLight }}>
+                      Requested {r.requested_at ? new Date(r.requested_at).toLocaleString('en-IN', {
+                        timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short',
+                        hour: '2-digit', minute: '2-digit', hour12: true }) : ''}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => decide(r, 'approve')} disabled={reqBusy === r.id}
+                      className="text-xs font-bold px-4 py-2 rounded-lg active:scale-95 disabled:opacity-60"
+                      style={{ background: '#dcfce7', color: '#16a34a' }}>
+                      {reqBusy === r.id ? '…' : '✓ Approve'}
+                    </button>
+                    <button onClick={() => decide(r, 'deny')} disabled={reqBusy === r.id}
+                      className="text-xs font-bold px-4 py-2 rounded-lg active:scale-95 disabled:opacity-60"
+                      style={{ background: '#fee2e2', color: '#dc2626' }}>
+                      Deny
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Table */}
         <div className="rounded-2xl shadow-sm overflow-hidden" style={{ background: '#fff', border: '1px solid #e8d5a3' }}>

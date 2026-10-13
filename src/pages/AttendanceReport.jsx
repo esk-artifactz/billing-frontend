@@ -559,7 +559,7 @@ export default function AttendanceReport() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
-                        {['Employee','Designation','P','H','L','A','Eff. Days','Gross','OT Pay','Advances','Paid','Balance','Actions'].map(h => (
+                        {['Employee','Designation','P','H','L','A','Eff. Days','Regular Pay','OT Pay','Total Earned','Advances','Paid','Balance','Actions'].map(h => (
                           <th key={h} className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wide"
                             style={{ color: B.goldLight }}>{h}</th>
                         ))}
@@ -604,12 +604,15 @@ export default function AttendanceReport() {
                           <td className="px-3 py-3 font-semibold text-center" style={{ color: B.brown }}>
                             {row.effective_days}
                           </td>
-                          <td className="px-3 py-3 font-bold whitespace-nowrap" style={{ color: '#1d4ed8' }}>
-                            {inr(row.gross_earned)}
+                          <td className="px-3 py-3 font-semibold whitespace-nowrap" style={{ color: '#0369a1' }}>
+                            {inr(row.base_earned ?? (parseFloat(row.gross_earned) - parseFloat(row.ot_pay || 0)))}
                           </td>
                           <td className="px-3 py-3 font-semibold whitespace-nowrap"
                             style={{ color: parseFloat(row.ot_pay) > 0 ? '#d97706' : '#9ca3af' }}>
-                            {parseFloat(row.ot_pay) > 0 ? inr(row.ot_pay) : '—'}
+                            {parseFloat(row.ot_pay) > 0 ? `+${inr(row.ot_pay)}` : '—'}
+                          </td>
+                          <td className="px-3 py-3 font-bold whitespace-nowrap" style={{ color: '#1d4ed8' }}>
+                            {inr(row.gross_earned)}
                           </td>
                           <td className="px-3 py-3 font-semibold whitespace-nowrap" style={{ color: '#7c3aed' }}>
                             {inr(row.total_advance)}
@@ -646,8 +649,9 @@ export default function AttendanceReport() {
                       <tr style={{ background: B.darkBrown }}>
                         <td colSpan={7} className="px-3 py-2.5 text-xs font-bold uppercase"
                           style={{ color: B.goldLight }}>Totals</td>
+                        <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#7dd3fc' }}>{inr(totalEarned - totalOTPay)}</td>
+                        <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#fbbf24' }}>{totalOTPay > 0 ? `+${inr(totalOTPay)}` : '—'}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: B.goldLight }}>{inr(totalEarned)}</td>
-                        <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#fbbf24' }}>{totalOTPay > 0 ? inr(totalOTPay) : '—'}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#c4b5fd' }}>{inr(totalAdv)}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#86efac' }}>{inr(totalPaid)}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs"
@@ -661,7 +665,7 @@ export default function AttendanceReport() {
             )}
             <p className="text-xs px-1" style={{ color: '#a07020' }}>
               P = Present · H = Half Day · L = Leave (unpaid) · A = Absent · Effective = P + H×0.5 ·
-              Gross = sum of per-day designation rates + OT pay · Balance = Gross − Advances − Paid
+              Total Earned = Regular Pay + OT Pay · Balance = Total − Advances − Paid
             </p>
           </div>
         )}
@@ -1166,10 +1170,14 @@ export default function AttendanceReport() {
                           </tbody>
                           <tfoot>
                             <tr style={{ background: B.cream }}>
-                              <td colSpan={5} className="px-3 py-2 text-xs font-bold" style={{ color: B.brown }}>
+                              <td colSpan={4} className="px-3 py-2 text-xs font-bold" style={{ color: B.brown }}>
                                 {detailDays.filter(d=>d.status==='present').length}P
                                 {detailDays.filter(d=>d.status==='half_day').length > 0 &&
                                   ` + ${detailDays.filter(d=>d.status==='half_day').length}H`} worked
+                              </td>
+                              <td className="px-3 py-2 font-extrabold text-xs" style={{ color: '#d97706' }}>
+                                {detailDays.reduce((s,d)=>s+(d.ot_pay||0),0) > 0
+                                  ? `+${inr(detailDays.reduce((s,d)=>s+(d.ot_pay||0),0))}` : '—'}
                               </td>
                               <td className="px-3 py-2 font-extrabold text-xs" style={{ color: '#1d4ed8' }}>
                                 {inr(detailDays.reduce((s,d)=>s+d.day_pay,0))}
@@ -1245,10 +1253,12 @@ export default function AttendanceReport() {
                     <div className="rounded-2xl p-4 space-y-2"
                       style={{ background: `linear-gradient(135deg,${B.darkBrown},${B.midBrown})` }}>
                       {[
-                        { label: 'Gross Earned',       val: detailSummary.gross_earned,  color: '#93c5fd' },
+                        { label: 'Regular Pay',         val: detailSummary.base_earned,   color: '#7dd3fc' },
+                        { label: 'OT Pay',              val: detailSummary.total_ot_pay,  color: '#fbbf24', showIf: parseFloat(detailSummary.total_ot_pay) > 0 },
+                        { label: 'Gross Earned',        val: detailSummary.gross_earned,  color: '#93c5fd' },
                         { label: 'Advances Given',      val: detailSummary.total_advance, color: '#c4b5fd', neg: true },
                         { label: 'Salary Paid',         val: detailSummary.total_paid,    color: '#86efac', neg: true },
-                      ].map(r => (
+                      ].filter(r => r.showIf === undefined || r.showIf).map(r => (
                         <div key={r.label} className="flex justify-between items-center">
                           <span className="text-xs font-semibold" style={{ color: '#c8a84b' }}>{r.label}</span>
                           <span className="text-sm font-bold" style={{ color: r.color }}>

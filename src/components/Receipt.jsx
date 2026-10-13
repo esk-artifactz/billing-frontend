@@ -104,12 +104,31 @@ export default function Receipt({ sale, items, onClose }) {
         <div className="flex justify-between font-bold text-base" style={{ color: B.text }}>
           <span>Total</span><span>₹{fmt(sale.grand_total)}</span>
         </div>
-        {sale.amount_tendered && (
-          <div className="mt-2 text-xs space-y-1">
-            <div className="flex justify-between"><span>Payment ({(sale.payment_method || '').toUpperCase()})</span><span>₹{fmt(sale.amount_tendered)}</span></div>
-            <div className="flex justify-between font-semibold"><span>Change</span><span>₹{fmt(sale.change_amount)}</span></div>
-          </div>
-        )}
+        {(() => {
+          let splits = null;
+          try { splits = typeof sale.payment_splits === 'string' ? JSON.parse(sale.payment_splits) : sale.payment_splits; } catch { splits = null; }
+          if (splits && Object.keys(splits).length > 0) {
+            return (
+              <div className="mt-2 text-xs space-y-1">
+                <div className="flex justify-between font-semibold"><span>Payment (Split)</span><span>₹{fmt(sale.grand_total)}</span></div>
+                {Object.entries(splits).map(([m, amt]) => (
+                  <div key={m} className="flex justify-between pl-3" style={{ color: '#555' }}>
+                    <span>{m.toUpperCase()}</span><span>₹{fmt(amt)}</span>
+                  </div>
+                ))}
+                {parseFloat(sale.change_amount) > 0 && (
+                  <div className="flex justify-between font-semibold"><span>Change</span><span>₹{fmt(sale.change_amount)}</span></div>
+                )}
+              </div>
+            );
+          }
+          return sale.amount_tendered ? (
+            <div className="mt-2 text-xs space-y-1">
+              <div className="flex justify-between"><span>Payment ({(sale.payment_method || '').toUpperCase()})</span><span>₹{fmt(sale.amount_tendered)}</span></div>
+              <div className="flex justify-between font-semibold"><span>Change</span><span>₹{fmt(sale.change_amount)}</span></div>
+            </div>
+          ) : null;
+        })()}
         <div className="h-px my-3" style={{ background: `linear-gradient(90deg, transparent, ${B.gold}, transparent)` }} />
         <p className="text-center text-xs" style={{ color: B.textLight }}>Made with love, served with Crown</p>
         <p className="text-center text-xs mt-0.5" style={{ color: '#aaa' }}>Thank you for visiting!</p>

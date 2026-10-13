@@ -101,6 +101,16 @@ export default function Attendance() {
     // Use override designation if set, else use employee default
     const desigId = rs.designation_id ? parseInt(rs.designation_id) : (defaultDesigId || null);
     const otHours = parseFloat(rs.ot_hours || 0) || 0;
+    // Resolve the OT rate to store on the record:
+    // 1. Explicit designation ot_rate (if the active designation has one configured)
+    // 2. null → backend falls back to daily_rate / 8
+    const activeDesigId = rs.designation_id
+      ? String(rs.designation_id)
+      : String(defaultDesigId || '');
+    const activeDesig = designations.find(d => String(d.id) === activeDesigId);
+    const otRate = otHours > 0
+      ? (activeDesig?.ot_rate != null ? parseFloat(activeDesig.ot_rate) : null)
+      : null;
     try {
       await markAttendance({
         employee_id:    empId,
@@ -108,6 +118,7 @@ export default function Attendance() {
         status,
         designation_id: desigId,
         ot_hours:       otHours,
+        ot_rate:        otRate,
       });
       showToast('Attendance marked!');
       const attRes = await getAttendance(selectedDate);
