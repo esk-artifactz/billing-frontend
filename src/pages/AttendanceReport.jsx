@@ -30,7 +30,7 @@ const STATUS_META = {
   leave:    { label: 'Leave',    color: '#7c3aed', bg: '#ede9fe' },
 };
 
-const EMPTY_EMP   = { emp_code: '', full_name: '', phone: '', role: 'Staff', default_designation_id: '', join_date: '' };
+const EMPTY_EMP   = { emp_code: '', full_name: '', phone: '', role: 'Staff', default_designation_id: '', designation_effective_from: '', join_date: '' };
 const EMPTY_DESIG = { name: '', daily_rate: '', ot_rate: '', description: '' };
 
 function currentMonth() {
@@ -352,6 +352,7 @@ export default function AttendanceReport() {
       phone:                  emp.phone || '',
       role:                   emp.role,
       default_designation_id: emp.default_designation_id || '',
+      designation_effective_from: emp.designation_effective_from?.slice(0,10) || '',
       join_date:              emp.join_date?.slice(0,10) || '',
     });
     setEditEmpId(emp.id); setEmpError(''); setEmpModal('edit');
@@ -373,11 +374,23 @@ export default function AttendanceReport() {
     setEmpSaving(true); setEmpError('');
     try {
       const payload = { ...empForm };
+      if (empModal === 'edit') {
+        // Send designation fields when the designation changed OR an
+        // effective date was explicitly picked (updates history only).
+        const orig = employees.find(x => x.id === editEmpId);
+        const desigChanged = String(orig?.default_designation_id || '') !== String(empForm.default_designation_id || '');
+        const datePicked   = !!empForm.designation_effective_from;
+        if (!desigChanged && !datePicked) {
+          delete payload.default_designation_id;
+          delete payload.designation_effective_from;
+        }
+      }
       if (empForm.default_designation_id) {
         payload.default_designation_id = parseInt(empForm.default_designation_id);
       } else {
         delete payload.default_designation_id; // don't send null/empty on edit
       }
+      if (!empForm.designation_effective_from) delete payload.designation_effective_from;
       if (empModal === 'add') await createEmployee(payload);
       else await updateEmployee(editEmpId, payload);
       showToast(empModal === 'add' ? 'Employee added!' : 'Employee updated!');
@@ -712,6 +725,11 @@ export default function AttendanceReport() {
                           <td className="px-4 py-3 text-xs" style={{ color: '#7a4e08' }}>{emp.role}</td>
                           <td className="px-4 py-3 text-xs font-semibold" style={{ color: '#1d4ed8' }}>
                             {emp.designation_name || '—'}
+                            {emp.designation_effective_from && (
+                              <div className="text-xs font-normal mt-0.5" style={{ color: '#9ca3af' }}>
+                                from {emp.designation_effective_from.slice(0,10)}
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-3 font-semibold" style={{ color: '#16a34a' }}>
                             {inr(emp.designation_daily_rate ?? emp.daily_rate)}/day
@@ -941,6 +959,22 @@ export default function AttendanceReport() {
                         ? <span style={{ color: '#d97706' }}> · OT: {inr(selectedDesig.ot_rate)}/hr</span>
                         : <span style={{ color: '#9ca3af' }}> · OT: not configured</span>}
                     </p>
+                  )}
+                  {/* Effective-from date — new designation applies from this date onward */}
+                  {empForm.default_designation_id && (
+                    <div className="mt-2">
+                      <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>
+                        Effective From <span style={{ color: '#a07020', fontWeight: 400 }}>(designation applies from this date)</span>
+                      </label>
+                      <input name="designation_effective_from" type="date"
+                        value={empForm.designation_effective_from} onChange={handleEmpChange}
+                        className={inpCls} style={inpSty} />
+                      <p className="text-xs mt-1" style={{ color: '#a07020' }}>
+                        {empModal === 'edit'
+                          ? 'Changing designation records history — attendance before this date keeps the old rate.'
+                          : 'Leave blank to use the join date.'}
+                      </p>
+                    </div>
                   )}
                 </div>
 

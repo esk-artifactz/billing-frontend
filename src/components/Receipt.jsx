@@ -96,6 +96,11 @@ export default function Receipt({ sale, items, onClose }) {
           {parseFloat(sale.tax_total) > 0 && (
             <div className="flex justify-between text-xs" style={{ color: '#666' }}><span>GST</span><span>₹{fmt(sale.tax_total)}</span></div>
           )}
+          {parseFloat(sale.other_charge) > 0 && (
+            <div className="flex justify-between text-xs" style={{ color: '#666' }}>
+              <span>Other Things{sale.other_description ? ` (${sale.other_description})` : ''}</span><span>₹{fmt(sale.other_charge)}</span>
+            </div>
+          )}
           {parseFloat(sale.round_off) !== 0 && (
             <div className="flex justify-between text-xs" style={{ color: '#999' }}><span>Round Off</span><span>₹{fmt(sale.round_off)}</span></div>
           )}

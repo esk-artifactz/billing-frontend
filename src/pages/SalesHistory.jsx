@@ -69,7 +69,7 @@ export default function SalesHistory() {
     const parcel   = parseFloat(editForm.parcel_charge)  || 0;
     const subtotal = parseFloat(editSale.subtotal || 0);
     const tax      = parseFloat(editSale.tax_total || 0);
-    const newTotal = Math.round(subtotal - discount + tax + parcel);
+    const newTotal = Math.round(subtotal - discount + tax + parcel + (parseFloat(editSale.other_charge) || 0));
     const payload  = {
       payment_method:  editForm.payment_method,
       amount_tendered: editForm.amount_tendered === '' ? null : parseFloat(editForm.amount_tendered),
@@ -341,7 +341,7 @@ export default function SalesHistory() {
         const parcel   = parseFloat(editForm.parcel_charge)  || 0;
         const subtotal = parseFloat(editSale.subtotal || 0);
         const tax      = parseFloat(editSale.tax_total || 0);
-        const newTotal = Math.round(subtotal - discount + tax + parcel);
+        const newTotal = Math.round(subtotal - discount + tax + parcel + (parseFloat(editSale.other_charge) || 0));
         const spSum    = (parseFloat(editForm.split_cash) || 0) +
                          (parseFloat(editForm.split_upi)  || 0) +
                          (parseFloat(editForm.split_card) || 0);
@@ -452,7 +452,7 @@ export default function SalesHistory() {
                 <div className="rounded-xl px-3 py-2.5 flex justify-between items-center"
                   style={{ background: '#fff9ee', border: `1.5px solid ${B.gold}` }}>
                   <span className="text-xs font-bold" style={{ color: B.textLight }}>
-                    New Bill Total {`(Subtotal ${fmtINR(subtotal)} − Discount + GST ${fmtINR(tax)} + Parcel)`}
+                    New Bill Total {`(Subtotal ${fmtINR(subtotal)} − Discount + GST ${fmtINR(tax)} + Parcel${parseFloat(editSale.other_charge) > 0 ? ` + Other Things ${fmtINR(editSale.other_charge)}` : ''})`}
                   </span>
                   <span className="font-extrabold" style={{ color: B.brown }}>{fmtINR(newTotal)}</span>
                 </div>

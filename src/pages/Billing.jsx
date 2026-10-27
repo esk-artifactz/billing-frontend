@@ -66,6 +66,8 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
   const [showDiscount, setShowDiscount]     = useState(false);
   const [parcel, setParcel]                 = useState('');
   const [showParcel, setShowParcel]         = useState(false);
+  const [otherAmount, setOtherAmount]       = useState('');
+  const [otherDesc, setOtherDesc]           = useState('');
   const [customerName, setCustomerName]     = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
   const [loading, setLoading] = useState(false);
@@ -74,7 +76,8 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
   const subtotal    = cart.reduce((s, i) => s + parseFloat(i.selling_price) * i.quantity, 0);
   const discountVal = parseFloat(discount) || 0;
   const parcelVal   = parseFloat(parcel) || 0;
-  const grandBefore = subtotal - discountVal + parcelVal;
+  const otherVal    = parseFloat(otherAmount) || 0;
+  const grandBefore = subtotal - discountVal + parcelVal + otherVal;
   const grandTotal  = Math.round(grandBefore);
   const roundOff    = grandTotal - grandBefore;
   const tendered    = parseFloat(amountTendered) || 0;
@@ -112,6 +115,8 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         items: cart.map(i => ({ product_id: i.id, quantity: i.quantity, discount_amount: 0 })),
         discount_total:  discountVal,
         parcel_charge:   parcelVal || undefined,
+        other_charge:    otherVal || undefined,
+        other_description: otherVal > 0 ? (otherDesc.trim() || undefined) : undefined,
         payment_method:  paymentMethod,
         amount_tendered: paymentMethod === 'cash' ? tendered : grandTotal,
         customer_name:   customerName.trim() || undefined,
@@ -150,6 +155,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
           <div className="flex justify-between" style={{ color: B.textLight }}><span>Subtotal</span><span>₹{fmt(subtotal)}</span></div>
           {discountVal > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-₹{fmt(discountVal)}</span></div>}
           {parcelVal   > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Parcel Charge</span><span>+₹{fmt(parcelVal)}</span></div>}
+          {otherVal    > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Other Things{otherDesc.trim() ? ` (${otherDesc.trim()})` : ''}</span><span>+₹{fmt(otherVal)}</span></div>}
           {roundOff   !== 0 && <div className="flex justify-between text-xs" style={{ color: '#aaa' }}><span>Round Off</span><span>₹{fmt(roundOff)}</span></div>}
           <div className="flex justify-between font-bold text-lg border-t pt-2" style={{ borderColor: B.gold, color: B.text }}>
             <span>Total</span><span style={{ color: B.goldDark }}>₹{fmt(grandTotal)}</span>
@@ -184,6 +190,17 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
               + Parcel
             </button>
           )}
+        </div>
+
+        {/* Other Things — items not in the product list, added as one amount */}
+        <div>
+          <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Other Things (₹)</label>
+          <div className="grid grid-cols-2 gap-2">
+            <input type="text" value={otherDesc} onChange={e => setOtherDesc(e.target.value)}
+              placeholder="Details (optional)" maxLength={200} style={inputStyle} />
+            <input type="number" value={otherAmount} onChange={e => setOtherAmount(e.target.value)}
+              placeholder="0.00" min="0" step="0.01" style={inputStyle} />
+          </div>
         </div>
 
         {/* Payment method */}
