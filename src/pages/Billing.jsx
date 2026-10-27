@@ -495,6 +495,23 @@ export default function Billing() {
   }, anyModalOpen);
 
   const searchRef = useRef(null);
+  // Input mode: 'text' = type to search products, 'scan' = barcode reader adds items directly
+  const [inputMode, setInputMode] = useState(() => localStorage.getItem('billingInputMode') || 'text');
+  const [scanMsg, setScanMsg]     = useState(null);
+  const scanMsgTimer = useRef(null);
+  const switchInputMode = (mode) => {
+    setInputMode(mode);
+    localStorage.setItem('billingInputMode', mode);
+    setSearchQuery('');
+    setScanMsg(null);
+    searchRef.current?.focus();
+  };
+  const flashScanMsg = (text, ok) => {
+    setScanMsg({ text, ok });
+    clearTimeout(scanMsgTimer.current);
+    scanMsgTimer.current = setTimeout(() => setScanMsg(null), 2500);
+  };
+  const findByBarcode = (code) => products.find(p => p.barcode && p.barcode === code.trim());
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -509,21 +526,33 @@ export default function Billing() {
 
   useEffect(() => { fetchProducts(); fetchCategories(); }, [fetchProducts, fetchCategories]);
 
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.key === 'Enter' && document.activeElement === searchRef.current) {
-        // Fallback for scanners that append Enter after the barcode
-        const match = products.find(p => p.barcode && p.barcode === searchQuery.trim());
-        if (match) { addToCart(match); setSearchQuery(''); }
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  });
+  // Enter key: scanners append Enter after the barcode
+  const handleSearchKeyDown = (e) => {
+    if (e.key !== 'Enter') return;
+    const code = searchQuery.trim();
+    if (!code) return;
+    const match = findByBarcode(code);
+    if (match) {
+      addToCart(match);
+      setSearchQuery('');
+      if (inputMode === 'scan') flashScanMsg(`Added: ${match.name}`, true);
+    } else if (inputMode === 'scan') {
+      flashScanMsg(`No product for barcode ${code}`, false);
+      setSearchQuery('');
+    }
+  };
+
+  const handleSearchChange = (q) => {
+    setSearchQuery(q);
+    // Scan mode: exact barcode match → add instantly (for scanners that don't send Enter)
+    if (inputMode !== 'scan') return;
+    const match = findByBarcode(q);
+    if (match) { addToCart(match); setSearchQuery(''); flashScanMsg(`Added: ${match.name}`, true); }
+  };
 
   const filteredProducts = products.filter(p => {
     const matchCat    = !selectedCategory || p.category_id === selectedCategory;
-    const matchSearch = !searchQuery ||
+    const matchSearch = inputMode === 'scan' || !searchQuery ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.barcode && p.barcode.includes(searchQuery));
     return matchCat && matchSearch && p.active;
@@ -742,22 +771,34 @@ export default function Billing() {
           <div className="flex-shrink-0 px-4 py-3 print:hidden"
             style={{ background: '#fff9ee', borderBottom: B.goldBorder }}>
             <div className="flex gap-2">
+              {/* Input mode toggle: type to search / barcode reader */}
+              <div className="flex rounded-xl overflow-hidden flex-shrink-0" style={{ border: `1.5px solid ${B.gold}` }}>
+                {[['text', 'Type'], ['scan', 'Scan']].map(([mode, label]) => (
+                  <button key={mode} type="button" onClick={() => switchInputMode(mode)}
+                    title={mode === 'text' ? 'Type to search products' : 'Read barcode with scanner'}
+                    className="px-3 py-2 text-xs font-bold transition-all"
+                    style={inputMode === mode
+                      ? { background: B.goldGrad, color: B.brown }
+                      : { background: B.cream, color: B.textLight }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
               <input
                 ref={searchRef}
                 type="text"
-                placeholder="Search or scan barcode..."
+                placeholder={inputMode === 'scan' ? 'Scan barcode with reader...' : 'Type product name or barcode...'}
                 value={searchQuery}
-                onChange={e => {
-                  const q = e.target.value;
-                  setSearchQuery(q);
-                  // Exact barcode match → add to cart instantly (works with
-                  // scanners that don't send Enter, and for typed barcodes)
-                  const match = products.find(p => p.barcode && p.barcode === q.trim());
-                  if (match) { addToCart(match); setSearchQuery(''); }
-                }}
+                onChange={e => handleSearchChange(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 autoFocus
-                className="flex-1 text-sm outline-none rounded-xl px-4 py-2.5"
-                style={{ background: B.cream, border: `1.5px solid ${B.gold}`, color: B.brown }}
+                autoComplete="off"
+                className="flex-1 min-w-0 text-sm outline-none rounded-xl px-4 py-2.5"
+                style={{
+                  background: inputMode === 'scan' ? '#f0fdf4' : B.cream,
+                  border: `1.5px solid ${inputMode === 'scan' ? '#16a34a' : B.gold}`,
+                  color: B.brown,
+                }}
               />
               {/* Camera barcode scan (mobile/tablet) */}
               <button onClick={() => setShowScanner(true)} title="Scan barcode with camera"
@@ -777,6 +818,9 @@ export default function Billing() {
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
+            {scanMsg && (
+              <p className="text-xs font-bold mt-1.5" style={{ color: scanMsg.ok ? '#16a34a' : '#dc2626' }}>{scanMsg.text}</p>
+            )}
           </div>
 
           {/* Products grid */}
