@@ -74,10 +74,13 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
   const [error, setError]     = useState('');
 
   const subtotal    = cart.reduce((s, i) => s + parseFloat(i.selling_price) * i.quantity, 0);
+  // GST per line, rounded like the backend (round2 of price × qty × gst%)
+  const taxTotal    = cart.reduce((s, i) =>
+    s + Math.round(parseFloat(i.selling_price) * i.quantity * parseFloat(i.gst_percentage || 0)) / 100, 0);
   const discountVal = parseFloat(discount) || 0;
   const parcelVal   = parseFloat(parcel) || 0;
   const otherVal    = parseFloat(otherAmount) || 0;
-  const grandBefore = subtotal - discountVal + parcelVal + otherVal;
+  const grandBefore = Math.round((subtotal - discountVal + taxTotal + parcelVal + otherVal) * 100) / 100;
   const grandTotal  = Math.round(grandBefore);
   const roundOff    = grandTotal - grandBefore;
   const tendered    = parseFloat(amountTendered) || 0;
@@ -154,6 +157,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         <div className="rounded-xl p-4 space-y-2 text-sm" style={{ background: '#fff9ee', border: B.goldBorder }}>
           <div className="flex justify-between" style={{ color: B.textLight }}><span>Subtotal</span><span>₹{fmt(subtotal)}</span></div>
           {discountVal > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-₹{fmt(discountVal)}</span></div>}
+          {taxTotal    > 0 && <div className="flex justify-between" style={{ color: B.textLight }}><span>GST</span><span>+₹{fmt(taxTotal)}</span></div>}
           {parcelVal   > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Parcel Charge</span><span>+₹{fmt(parcelVal)}</span></div>}
           {otherVal    > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Other Things{otherDesc.trim() ? ` (${otherDesc.trim()})` : ''}</span><span>+₹{fmt(otherVal)}</span></div>}
           {roundOff   !== 0 && <div className="flex justify-between text-xs" style={{ color: '#aaa' }}><span>Round Off</span><span>₹{fmt(roundOff)}</span></div>}
@@ -297,12 +301,53 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
   );
 }
 
+// ─── Hold Name Modal — reference name to identify the held bill ──────────────
+
+function HoldNameModal({ initialName, isUpdate, onClose, onConfirm }) {
+  const [name, setName]   = useState(initialName || '');
+  const [error, setError] = useState('');
+  const submit = (e) => {
+    e.preventDefault();
+    if (!name.trim()) { setError('Enter a reference name'); return; }
+    onConfirm(name.trim());
+  };
+  return (
+    <Modal title={isUpdate ? 'Update Held Bill' : 'Hold Bill'} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        <label className="block text-sm font-semibold" style={{ color: B.text }}>Reference Name</label>
+        <input type="text" value={name} onChange={e => { setName(e.target.value); setError(''); }}
+          placeholder="e.g. Table 4, Ravi, Parcel - Blue shirt" maxLength={100} autoFocus
+          style={{ background: '#fff9ee', border: `1.5px solid ${B.gold}`, color: B.brown,
+                   borderRadius: 12, padding: '10px 14px', width: '100%', fontSize: 14, outline: 'none' }} />
+        {error && <p className="text-xs font-semibold text-red-600">{error}</p>}
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: '#f5f5f5', color: '#555' }}>
+            Cancel
+          </button>
+          <button type="submit"
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-all"
+            style={{ background: B.goldGrad, color: B.brown }}>
+            {isUpdate ? 'Update Hold' : 'Hold Bill'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ─── Held Bills Modal ─────────────────────────────────────────────────────────
 
 function HeldBillsModal({ onClose, onRetrieve }) {
   const [heldSales, setHeldSales] = useState([]);
   const [loading, setLoading]     = useState(true);
   const [deleting, setDeleting]   = useState(null);
+  const [search, setSearch]       = useState('');
+  const q = search.trim().toLowerCase();
+  const visible = heldSales.filter(h => !q ||
+    (h.hold_name || '').toLowerCase().includes(q) ||
+    h.hold_reference.toLowerCase().includes(q) ||
+    (h.items_summary || '').toLowerCase().includes(q));
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -318,7 +363,8 @@ function HeldBillsModal({ onClose, onRetrieve }) {
   };
 
   const handleDelete = async (ref) => {
-    if (!window.confirm(`Delete held bill ${ref}?`)) return;
+    const h = heldSales.find(x => x.hold_reference === ref);
+    if (!window.confirm(`Delete held bill ${h?.hold_name ? `"${h.hold_name}" (${ref})` : ref}?`)) return;
     setDeleting(ref);
     try { await deleteHeldSale(ref); setHeldSales(prev => prev.filter(h => h.hold_reference !== ref)); }
     catch (err) { alert(err.response?.data?.detail || 'Failed to delete'); }
@@ -333,11 +379,24 @@ function HeldBillsModal({ onClose, onRetrieve }) {
         <p className="text-center py-8" style={{ color: B.textLight }}>No held bills</p>
       ) : (
         <div className="space-y-3">
-          {heldSales.map(h => (
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} autoFocus
+            placeholder="Search by reference name, bill no. or item..."
+            className="w-full text-sm outline-none rounded-xl px-4 py-2.5"
+            style={{ background: B.cream, border: `1.5px solid ${B.gold}`, color: B.brown }} />
+          {visible.length === 0 && (
+            <p className="text-center py-4 text-sm" style={{ color: B.textLight }}>No held bills match "{search}"</p>
+          )}
+          {visible.map(h => (
             <div key={h.id} className="rounded-xl p-4 flex items-center justify-between gap-4"
               style={{ background: '#fff9ee', border: B.goldBorder }}>
-              <div className="flex-1">
-                <p className="font-bold" style={{ color: B.text }}>{h.hold_reference}</p>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-base truncate" style={{ color: B.text }}>{h.hold_name || h.hold_reference}</p>
+                {h.hold_name && <p className="text-xs font-mono" style={{ color: B.textLight }}>{h.hold_reference}</p>}
+                {h.items_summary && (
+                  <p className="text-xs truncate" style={{ color: B.brown }} title={h.items_summary}>
+                    {h.item_count} item{Number(h.item_count) !== 1 ? 's' : ''}: {h.items_summary}
+                  </p>
+                )}
                 <p className="text-xs" style={{ color: B.textLight }}>Cashier: {h.cashier_username}</p>
                 <p className="text-xs" style={{ color: '#aaa' }}>{new Date(h.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
               </div>
@@ -482,11 +541,14 @@ export default function Billing() {
   const [receiptData, setReceiptData]       = useState(null);
   const [holdingMsg, setHoldingMsg]         = useState('');
   const [retrievedHoldRef, setRetrievedHoldRef] = useState(null);
+  const [retrievedHoldName, setRetrievedHoldName] = useState('');
+  const [showHoldName, setShowHoldName]     = useState(false);
   const [showScanner, setShowScanner]       = useState(false);
 
   // Close any open popup/overlay on Escape
-  const anyModalOpen = showCheckout || showHeld || showMobileCart || !!receiptData || showScanner;
+  const anyModalOpen = showCheckout || showHeld || showMobileCart || !!receiptData || showScanner || showHoldName;
   useEscClose(() => {
+    if (showHoldName)     { setShowHoldName(false);     return; }
     if (receiptData)      { setReceiptData(null);       return; }
     if (showCheckout)     { setShowCheckout(false);     return; }
     if (showScanner)      { setShowScanner(false);      return; }
@@ -595,20 +657,23 @@ export default function Billing() {
   const gstTotal  = cart.reduce((s, i) => s + parseFloat(i.selling_price) * i.quantity * parseFloat(i.gst_percentage || 0) / 100, 0);
   const grandTotal = subtotal + gstTotal;
 
-  const handleHold = async () => {
+  const handleHold = async (holdName) => {
     if (cart.length === 0) return;
+    setShowHoldName(false);
     try {
       setHoldingMsg('Holding...');
       const payload = {
         items: cart.map(i => ({ product_id: i.id, quantity: i.quantity, discount_amount: 0 })),
         discount_total: 0,
+        hold_name: holdName,
       };
       // Re-holding a retrieved bill updates it in place — no duplicate hold
       if (retrievedHoldRef) payload.hold_reference = retrievedHoldRef;
-      const res = await holdSale(payload);
+      await holdSale(payload);
       setCart([]);
       setRetrievedHoldRef(null);
-      setHoldingMsg(retrievedHoldRef ? `Updated: ${res.data.hold_reference}` : `Held: ${res.data.hold_reference}`);
+      setRetrievedHoldName('');
+      setHoldingMsg(retrievedHoldRef ? `Updated: ${holdName}` : `Held: ${holdName}`);
       setTimeout(() => setHoldingMsg(''), 3000);
     } catch (err) {
       setHoldingMsg(err.response?.data?.detail || 'Hold failed');
@@ -628,6 +693,7 @@ export default function Billing() {
     // Keep the held record on the server until checkout actually succeeds —
     // deleting it here loses the bill if checkout fails for any reason.
     setRetrievedHoldRef(held_sale.hold_reference);
+    setRetrievedHoldName(held_sale.hold_name || '');
     setShowHeld(false); setShowMobileCart(false);
   };
 
@@ -645,6 +711,7 @@ export default function Billing() {
         }
       }
       setRetrievedHoldRef(null);
+      setRetrievedHoldName('');
     }
     if (data._queued) {
       // Bill saved locally — will sync when the network returns
@@ -660,7 +727,7 @@ export default function Billing() {
   const cartProps = {
     cart, updateQuantity, setQuantity, removeFromCart,
     onCheckout: () => { setShowMobileCart(false); setShowCheckout(true); },
-    onHold: handleHold,
+    onHold: () => { if (cart.length) { setShowMobileCart(false); setShowHoldName(true); } },
     onShowHeld: () => { setShowMobileCart(false); setShowHeld(true); },
     subtotal, gstTotal, grandTotal,
   };
@@ -923,6 +990,8 @@ export default function Billing() {
       {/* ── Modals ── */}
       {showCheckout && <CheckoutModal cart={cart} onClose={() => setShowCheckout(false)} onSuccess={handleCheckoutSuccess} />}
       {showHeld      && <HeldBillsModal onClose={() => setShowHeld(false)} onRetrieve={handleRetrieveHeld} />}
+      {showHoldName  && <HoldNameModal initialName={retrievedHoldName} isUpdate={!!retrievedHoldRef}
+                          onClose={() => setShowHoldName(false)} onConfirm={handleHold} />}
       {showScanner   && <BarcodeScannerModal onScan={handleScanResult} onClose={() => setShowScanner(false)} />}
       {receiptData   && <Receipt sale={receiptData.sale} items={receiptData.items} onClose={() => setReceiptData(null)} />}
     </div>

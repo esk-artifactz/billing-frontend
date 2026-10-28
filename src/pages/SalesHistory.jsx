@@ -287,7 +287,13 @@ export default function SalesHistory() {
                             : '—'}
                         </td>
                         <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{s.cashier_username}</td>
-                        <td className="px-4 py-3 text-xs text-center" style={{ color: B.textLight }}>{s.item_count ?? '—'}</td>
+                        <td className="px-4 py-3 text-xs text-center" style={{ color: B.textLight }}>
+                          {s.item_count ?? '—'}
+                          {parseFloat(s.other_charge) > 0 && (
+                            <div className="text-[10px] font-bold" style={{ color: '#b45309' }}
+                              title={s.other_description || 'Other Things'}>+ Other ₹{parseFloat(s.other_charge).toFixed(2)}</div>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full uppercase"
                             style={{ background: pm.bg, color: pm.color }}>{pm.label}</span>
