@@ -73,6 +73,21 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
 
+  // Cursor goes to the field the cashier needs for the chosen payment method
+  const tenderedRef  = useRef(null);
+  const splitCashRef = useRef(null);
+  const confirmRef   = useRef(null);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const el = paymentMethod === 'cash' ? tenderedRef.current
+               : paymentMethod === 'split' ? splitCashRef.current
+               : confirmRef.current;
+      el?.focus();
+      el?.select?.();
+    }, 50);
+    return () => clearTimeout(t);
+  }, [paymentMethod]);
+
   const subtotal    = cart.reduce((s, i) => s + parseFloat(i.selling_price) * i.quantity, 0);
   // GST per line, rounded like the backend (round2 of price × qty × gst%)
   const taxTotal    = cart.reduce((s, i) =>
@@ -110,7 +125,10 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
   };
 
   const handleCheckout = async () => {
-    if (paymentMethod === 'cash' && tendered < grandTotal) { setError('Amount tendered must be ≥ grand total'); return; }
+    if (loading) return;
+    // Cash with the tendered box left empty = exact amount
+    const cashGiven = paymentMethod === 'cash' && amountTendered === '' ? grandTotal : tendered;
+    if (paymentMethod === 'cash' && cashGiven < grandTotal) { setError('Amount tendered must be ≥ grand total'); return; }
     if (paymentMethod === 'split' && !spValid) { setError(`Split amounts must add up to ₹${fmt(grandTotal)}`); return; }
     setLoading(true); setError('');
     try {
@@ -121,7 +139,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         other_charge:    otherVal || undefined,
         other_description: otherVal > 0 ? (otherDesc.trim() || undefined) : undefined,
         payment_method:  paymentMethod,
-        amount_tendered: paymentMethod === 'cash' ? tendered : grandTotal,
+        amount_tendered: paymentMethod === 'cash' ? cashGiven : grandTotal,
         customer_name:   customerName.trim() || undefined,
         customer_mobile: customerMobile.trim() || undefined,
       };
@@ -138,9 +156,16 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
     } finally { setLoading(false); }
   };
 
+  // Enter anywhere in checkout confirms the payment (buttons keep their own Enter = click)
+  const handleKeyDown = (e) => {
+    if (e.key !== 'Enter' || e.target.tagName === 'BUTTON') return;
+    e.preventDefault();
+    handleCheckout();
+  };
+
   return (
     <Modal title="Checkout" onClose={onClose}>
-      <div className="space-y-4">
+      <div className="space-y-4" onKeyDown={handleKeyDown}>
 
         {/* Customer (optional) */}
         <div className="rounded-xl p-3 space-y-2" style={{ background: '#fff9ee', border: B.goldBorder }}>
@@ -237,6 +262,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
               <div key={row.key} className="flex items-center gap-2">
                 <label className="w-20 text-xs font-bold" style={{ color: row.color }}>{row.label}</label>
                 <input type="number" min="0" step="0.01" value={row.val}
+                  ref={row.key === 'cash' ? splitCashRef : undefined}
                   onChange={e => updateSplit(row.key, e.target.value)}
                   placeholder="0.00"
                   style={{ ...inputStyle, padding: '6px 10px', fontSize: 13 }} />
@@ -264,8 +290,9 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         {paymentMethod === 'cash' && (
           <div>
             <label className="block text-sm font-semibold mb-1.5" style={{ color: B.text }}>Amount Tendered (₹)</label>
-            <input type="number" value={amountTendered} onChange={e => setAmountTendered(e.target.value)}
+            <input ref={tenderedRef} type="number" value={amountTendered} onChange={e => setAmountTendered(e.target.value)}
               placeholder={fmt(grandTotal)} min={grandTotal} style={inputStyle} />
+            <p className="text-xs mt-1" style={{ color: B.textLight }}>Press Enter to confirm — leave empty for exact amount</p>
             <div className="flex gap-2 mt-2 flex-wrap">
               {[grandTotal, Math.ceil(grandTotal / 10) * 10, Math.ceil(grandTotal / 50) * 50, Math.ceil(grandTotal / 100) * 100]
                 .filter((v, i, a) => a.indexOf(v) === i).map(v => (
@@ -290,7 +317,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
 
         {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
 
-        <button onClick={handleCheckout} disabled={loading || (paymentMethod === 'split' && !spValid)}
+        <button ref={confirmRef} onClick={handleCheckout} disabled={loading || (paymentMethod === 'split' && !spValid)}
           className="w-full font-bold py-3.5 rounded-xl text-base uppercase tracking-wider transition-all active:scale-95 disabled:opacity-60"
           style={{ background: loading ? '#c8a84b' : B.goldGrad, color: B.brown, letterSpacing: '0.1em',
             boxShadow: '0 4px 15px rgba(180,130,10,0.35)' }}>
@@ -557,6 +584,39 @@ export default function Billing() {
   }, anyModalOpen);
 
   const searchRef = useRef(null);
+
+  // Keep the cursor on the barcode/search box whenever the billing screen is active:
+  // on load, when a popup closes, when the window/tab regains focus, and after
+  // clicking anything that isn't another input (cart qty boxes keep their focus).
+  useEffect(() => {
+    if (anyModalOpen) return;
+    const isField = (el) => !!el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable);
+    const focusSearch = () => {
+      const el = searchRef.current;
+      if (el && document.activeElement !== el && !isField(document.activeElement)) el.focus();
+    };
+    const later = () => setTimeout(focusSearch, 0);
+    const onVisible = () => { if (!document.hidden) later(); };
+    const onPointerUp = (e) => { if (!isField(e.target)) later(); };
+    // Leaving a cart qty box etc. without moving to another field → back to barcode box
+    const onFocusOut = (e) => { if (!isField(e.relatedTarget)) later(); };
+    // Touch screens: don't pop the on-screen keyboard on every tap
+    const touch = window.matchMedia?.('(pointer: coarse)').matches;
+
+    later();
+    window.addEventListener('focus', later);
+    document.addEventListener('visibilitychange', onVisible);
+    if (!touch) {
+      document.addEventListener('pointerup', onPointerUp);
+      document.addEventListener('focusout', onFocusOut);
+    }
+    return () => {
+      window.removeEventListener('focus', later);
+      document.removeEventListener('visibilitychange', onVisible);
+      document.removeEventListener('pointerup', onPointerUp);
+      document.removeEventListener('focusout', onFocusOut);
+    };
+  }, [anyModalOpen]);
   // Input mode: 'text' = type to search products, 'scan' = barcode reader adds items directly
   const [inputMode, setInputMode] = useState(() => localStorage.getItem('billingInputMode') || 'text');
   const [scanMsg, setScanMsg]     = useState(null);

@@ -39,6 +39,12 @@ export default function ReceiveStock() {
   // received quantities per item: { [po_item_id]: qty_string }
   const [recvQty,      setRecvQty]      = useState({});
   const [recvNotes,    setRecvNotes]    = useState('');
+  // Supplier bill for this delivery + payment made now (goes to the supplier ledger)
+  const [invoiceNo,    setInvoiceNo]    = useState('');
+  const [billOverride, setBillOverride] = useState('');      // '' = use qty × purchase price
+  const [payType,      setPayType]      = useState('later'); // 'full' | 'partial' | 'later'
+  const [payAmount,    setPayAmount]    = useState('');
+  const [payMode,      setPayMode]      = useState('cash');
   const [saving,       setSaving]       = useState(false);
   const [saveError,    setSaveError]    = useState('');
 
@@ -63,6 +69,7 @@ export default function ReceiveStock() {
   // ── Select a PO to receive ─────────────────────────────────────────────────
   const openPO = async (id) => {
     setLoadingPO(true); setSaveError(''); setRecvNotes('');
+    setInvoiceNo(''); setBillOverride(''); setPayType('later'); setPayAmount(''); setPayMode('cash');
     try {
       const res = await getPurchaseOrder(id);
       const po  = res.data.purchase_order;
@@ -81,6 +88,13 @@ export default function ReceiveStock() {
 
   const closePO = () => { setSelectedPO(null); setRecvQty({}); setSaveError(''); };
 
+  // Value of what is being received now (qty × purchase price) and the bill amount
+  const recvValue = selectedPO
+    ? selectedPO.items.reduce((s, it) => s + (parseFloat(recvQty[it.id]) || 0) * (parseFloat(it.purchase_price) || 0), 0)
+    : 0;
+  const billAmount = billOverride !== '' ? (parseFloat(billOverride) || 0) : Math.round(recvValue * 100) / 100;
+  const paidNow    = payType === 'full' ? billAmount : payType === 'partial' ? (parseFloat(payAmount) || 0) : 0;
+
   // ── Submit receive ─────────────────────────────────────────────────────────
   const handleReceive = async () => {
     const items = selectedPO.items
@@ -91,11 +105,23 @@ export default function ReceiveStock() {
       setSaveError('Enter received quantity for at least one item.');
       return;
     }
+    if (payType === 'partial' && (paidNow <= 0 || paidNow > billAmount)) {
+      setSaveError('Enter a partial payment between 0 and the bill amount.');
+      return;
+    }
 
     setSaving(true); setSaveError('');
     try {
-      await receivePurchaseOrder(selectedPO.id, { items, notes: recvNotes || null });
-      showToast(`Stock received for PO ${selectedPO.po_number}!`);
+      const res = await receivePurchaseOrder(selectedPO.id, {
+        items, notes: recvNotes || null,
+        supplier_invoice_no: invoiceNo.trim() || undefined,
+        bill_amount: billAmount,
+        payment: paidNow > 0 ? { amount: paidNow, payment_mode: payMode } : undefined,
+      });
+      const pending = Math.max(0, billAmount - paidNow);
+      showToast(res.data?.ledger_note
+        || `Stock received for PO ${selectedPO.po_number}` + (selectedPO.supplier_id && billAmount > 0
+          ? ` — bill ₹${billAmount.toFixed(2)}, ${pending > 0 ? `pending ₹${pending.toFixed(2)}` : 'paid'}` : ''));
       closePO();
       loadOrders(statusFilter);
     } catch (err) {
@@ -393,6 +419,71 @@ export default function ReceiveStock() {
                         {saveError}
                       </div>
                     )}
+                    {/* Supplier bill + payment (supplier ledger) */}
+                    <div className="rounded-xl p-3 space-y-2" style={{ background: '#fffbf2', border: '1px solid #e8d5a3' }}>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-bold uppercase tracking-wider" style={{ color: B.brown }}>Supplier Bill</p>
+                        {!selectedPO.supplier_id && (
+                          <span className="text-xs font-semibold" style={{ color: '#d97706' }}>
+                            No supplier on this PO — not added to supplier ledger
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs font-semibold block mb-1" style={{ color: '#7a4e08' }}>Supplier Invoice No.</label>
+                          <input type="text" value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)}
+                            className="w-full border-2 rounded-lg px-2 py-1.5 text-sm outline-none" style={{ borderColor: '#e8d5a3' }}
+                            placeholder="Optional" maxLength={60} />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold block mb-1" style={{ color: '#7a4e08' }}>
+                            Bill Amount (₹) <span className="font-normal text-gray-400">qty × price = {recvValue.toFixed(2)}</span>
+                          </label>
+                          <input type="number" min="0" step="0.01" value={billOverride}
+                            onChange={e => setBillOverride(e.target.value)} placeholder={recvValue.toFixed(2)}
+                            className="w-full border-2 rounded-lg px-2 py-1.5 text-sm outline-none" style={{ borderColor: '#e8d5a3' }} />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {[['full', 'Paid in full'], ['partial', 'Part paid'], ['later', 'Pay later']].map(([k, label]) => (
+                          <button key={k} type="button" onClick={() => setPayType(k)}
+                            className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+                            style={payType === k
+                              ? { background: B.gold, color: B.darkBrown, border: `2px solid ${B.gold}` }
+                              : { background: '#fff', color: '#7a4e08', border: '2px solid #e8d5a3' }}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      {payType !== 'later' && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs font-semibold block mb-1" style={{ color: '#7a4e08' }}>Paid Now (₹)</label>
+                            <input type="number" min="0" step="0.01"
+                              value={payType === 'full' ? billAmount.toFixed(2) : payAmount}
+                              onChange={e => setPayAmount(e.target.value)} disabled={payType === 'full'}
+                              className="w-full border-2 rounded-lg px-2 py-1.5 text-sm outline-none disabled:bg-gray-50"
+                              style={{ borderColor: '#e8d5a3' }} />
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold block mb-1" style={{ color: '#7a4e08' }}>Payment Mode</label>
+                            <select value={payMode} onChange={e => setPayMode(e.target.value)}
+                              className="w-full border-2 rounded-lg px-2 py-1.5 text-sm outline-none" style={{ borderColor: '#e8d5a3' }}>
+                              <option value="cash">Cash</option>
+                              <option value="upi">UPI</option>
+                              <option value="bank">Bank</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-xs font-semibold pt-1" style={{ color: '#7a4e08' }}>
+                        <span>Bill ₹{billAmount.toFixed(2)} · Paid ₹{paidNow.toFixed(2)}</span>
+                        <span style={{ color: billAmount - paidNow > 0 ? '#dc2626' : '#16a34a' }}>
+                          {billAmount - paidNow > 0 ? `Pending ₹${(billAmount - paidNow).toFixed(2)}` : 'Fully paid'}
+                        </span>
+                      </div>
+                    </div>
                     <div>
                       <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>Notes (optional)</label>
                       <input type="text" value={recvNotes} onChange={e => setRecvNotes(e.target.value)}

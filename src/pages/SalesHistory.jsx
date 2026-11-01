@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -101,18 +101,30 @@ export default function SalesHistory() {
     } finally { setEditSaving(false); }
   };
 
+  // Debounce typing so every keystroke doesn't fire a request
+  const [searchQ, setSearchQ] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQ(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Only the latest request may update the list — an older, slower response
+  // (e.g. for the previously selected date) must not overwrite newer results
+  const reqSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++reqSeq.current;
     setLoading(true);
     try {
       const params = {};
       if (filterDate) params.date = filterDate;
-      if (search)     params.search = search;
+      if (searchQ)    params.search = searchQ;
       const res = await getSalesHistory(params);
-      setSales(res.data.sales || []);
+      if (seq === reqSeq.current) setSales(res.data.sales || []);
     } catch (err) {
       if (err.response?.status === 401 || err.response?.status === 403) { signOut(); navigate('/login'); }
-    } finally { setLoading(false); }
-  }, [filterDate, search, navigate, signOut]);
+      else if (seq === reqSeq.current) { setSales([]); showToast('Failed to load bills.', false); }
+    } finally { if (seq === reqSeq.current) setLoading(false); }
+  }, [filterDate, searchQ, navigate, signOut]);
 
   useEffect(() => { load(); }, [load]);
 

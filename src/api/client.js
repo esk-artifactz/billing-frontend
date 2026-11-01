@@ -185,6 +185,12 @@ export const createSupplier  = (data)   => api.post('/suppliers', data);
 export const updateSupplier  = (id, d)  => api.put(`/suppliers/${id}`, d);
 export const deleteSupplier  = (id)     => api.delete(`/suppliers/${id}`);
 
+// ── Supplier ledger (bills, payments, returns, pending balance) ───────────────
+export const getSupplierLedgerSummary = ()             => api.get('/supplier-ledger');
+export const getSupplierLedger        = (id, params={}) => api.get(`/suppliers/${id}/ledger`, { params });
+export const addSupplierPayment       = (id, data)     => api.post(`/suppliers/${id}/payments`, data);
+export const deleteSupplierLedgerEntry = (entryId)     => api.delete(`/supplier-ledger/${entryId}`);
+
 // ── Brands ────────────────────────────────────────────────────────────────────
 
 export const getBrands = () => api.get('/brands');

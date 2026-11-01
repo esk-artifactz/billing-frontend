@@ -3,6 +3,7 @@ import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getExpenseCategories, getExpenseReport, updateDailyExpense } from '../api/client';
+import SupplierLedger from '../components/SupplierLedger';
 
 const B = {
   darkBrown: '#2d1a0e', midBrown: '#4a2c0a', brown: '#3d2008',
@@ -56,7 +57,7 @@ export default function ExpenseCategories() {
       await updateDailyExpense(e.id, { amount: newAmt });
       setInlineEditId(null);
       setInlineAmount('');
-      await loadReport();
+      await Promise.all([loadReport(), loadCatTxns(openCat)]);
       showToast('Amount updated!');
     } catch (err) {
       showToast(err.response?.data?.detail || 'Failed to update amount.', false);
@@ -90,6 +91,34 @@ export default function ExpenseCategories() {
   }, [dateFrom, dateTo, filterCat, filterMode, navigate, signOut]);
 
   useEffect(() => { loadReport(); }, [loadReport]);
+
+  // ── By Category drill-down: transactions of the selected category ─────────
+  const [openCat,    setOpenCat]    = useState(null);   // category name or null
+  const [catTxns,    setCatTxns]    = useState([]);
+  const [catTxnLoad, setCatTxnLoad] = useState(false);
+
+  const loadCatTxns = useCallback(async (category) => {
+    if (!category) { setCatTxns([]); return; }
+    setCatTxnLoad(true);
+    try {
+      const params = { from: dateFrom, to: dateTo, category, recent_limit: 5000 };
+      if (filterMode !== 'all') params.payment_mode = filterMode;
+      const res = await getExpenseReport(params);
+      setCatTxns(res.data.recent || []);
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to load transactions.', false);
+    } finally { setCatTxnLoad(false); }
+  }, [dateFrom, dateTo, filterMode]);
+
+  // Reload the open category when the date / mode filter changes
+  useEffect(() => { loadCatTxns(openCat); }, [openCat, loadCatTxns]);
+  const toggleCat = (category) => setOpenCat(c => (c === category ? null : category));
+  useEffect(() => {
+    if (!openCat) return;
+    const t = setTimeout(() => document.getElementById('category-transactions')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+    return () => clearTimeout(t);
+  }, [openCat]);
 
   const maxCatTotal = Math.max(...(report?.by_category?.map(c => c.total) || [1]), 1);
 
@@ -256,8 +285,7 @@ export default function ExpenseCategories() {
               {[
                 { key: 'category', label: 'By Category' },
                 { key: 'supplier', label: 'By Supplier' },
-                { key: 'mode',     label: 'By Payment Mode' },
-                { key: 'recent',   label: 'Transactions' },
+                { key: 'ledger',   label: 'Supplier Ledger' },
               ].map(v => (
                 <button key={v.key} onClick={() => setReportView(v.key)}
                   className="px-4 py-2 rounded-xl text-sm font-bold active:scale-95 transition-all"
@@ -269,19 +297,29 @@ export default function ExpenseCategories() {
               ))}
             </div>
 
+            {/* Supplier Ledger — bills, payments, returns, pending per supplier */}
+            {reportView === 'ledger' && (
+              <SupplierLedger dateFrom={dateFrom} dateTo={dateTo} showToast={showToast} />
+            )}
+
             {/* By Category */}
             {reportView === 'category' && (
               <div className="rounded-2xl shadow-sm overflow-hidden"
                 style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
                 <div className="px-5 py-3 border-b" style={{ background: '#fffbf2', borderColor: '#e8d5a3' }}>
-                  <h3 className="font-bold text-sm" style={{ color: B.text }}>Spending by Category</h3>
+                  <h3 className="font-bold text-sm" style={{ color: B.text }}>
+                    Spending by Category
+                    <span className="ml-2 text-xs font-normal text-gray-400">(click a category to view its transactions)</span>
+                  </h3>
                 </div>
                 {report.by_category.length === 0 ? (
                   <p className="text-center py-10 text-sm" style={{ color: B.textLight }}>No data for selected period.</p>
                 ) : (
                   <div className="divide-y" style={{ borderColor: '#f0e0c0' }}>
                     {report.by_category.map(c => (
-                      <div key={c.category} className="px-5 py-4">
+                      <div key={c.category} onClick={() => toggleCat(c.category)}
+                        className="px-5 py-4 cursor-pointer transition-colors hover:bg-amber-50"
+                        style={openCat === c.category ? { background: '#fff7e0', boxShadow: `inset 4px 0 0 ${c.color}` } : undefined}>
                         <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                           <div className="flex items-center gap-2">
                             <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: c.color }} />
@@ -292,6 +330,10 @@ export default function ExpenseCategories() {
                             <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                               style={{ background: c.color + '22', color: c.color }}>{c.pct}%</span>
                             <span className="font-extrabold" style={{ color: B.brown }}>{fmtINR(c.total)}</span>
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-lg"
+                              style={{ background: openCat === c.category ? B.gold : '#fff9ee', color: B.darkBrown, border: '1px solid #e8d5a3' }}>
+                              {openCat === c.category ? 'Hide ▲' : 'View ▼'}
+                            </span>
                           </div>
                         </div>
                         <div className="h-2 rounded-full overflow-hidden" style={{ background: '#f0e8d0' }}>
@@ -389,55 +431,32 @@ export default function ExpenseCategories() {
               );
             })()}
 
-            {/* By Mode */}
-            {reportView === 'mode' && (
-              <div className="rounded-2xl shadow-sm overflow-hidden"
-                style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
-                <div className="px-5 py-3 border-b" style={{ background: '#fffbf2', borderColor: '#e8d5a3' }}>
-                  <h3 className="font-bold text-sm" style={{ color: B.text }}>Spending by Payment Mode</h3>
-                </div>
-                <div className="divide-y" style={{ borderColor: '#f0e0c0' }}>
-                  {report.by_mode.map(m => {
-                    const s = PM_STYLE[m.mode] || { bg: '#f5f5f5', color: '#555', label: m.mode };
-                    const pct = report.grand_total ? Math.round((m.total / report.grand_total) * 100) : 0;
-                    return (
-                      <div key={m.mode} className="px-5 py-4">
-                        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-extrabold px-3 py-1 rounded-full uppercase"
-                              style={{ background: s.bg, color: s.color }}>{s.label}</span>
-                            <span className="text-xs text-gray-400">{m.count} entries</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs font-bold" style={{ color: s.color }}>{pct}%</span>
-                            <span className="font-extrabold" style={{ color: B.brown }}>{fmtINR(m.total)}</span>
-                          </div>
-                        </div>
-                        <div className="h-2.5 rounded-full overflow-hidden" style={{ background: '#f0e8d0' }}>
-                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: s.color }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Transactions */}
-            {reportView === 'recent' && (
-              <div className="rounded-2xl shadow-sm overflow-hidden"
-                style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
-                <div className="px-5 py-3 border-b flex items-center justify-between"
+            {/* Transactions of the selected category (By Category drill-down) */}
+            {reportView === 'category' && openCat && (
+              <div id="category-transactions" className="rounded-2xl shadow-sm overflow-hidden"
+                style={{ background: '#fff', border: `2px solid ${report.by_category.find(c => c.category === openCat)?.color || B.gold}` }}>
+                <div className="px-5 py-3 border-b flex items-center justify-between gap-2 flex-wrap"
                   style={{ background: '#fffbf2', borderColor: '#e8d5a3' }}>
                   <h3 className="font-bold text-sm" style={{ color: B.text }}>
-                    Transactions
-                    <span className="ml-2 text-xs font-normal text-gray-400">(latest 50 · click ✎ to edit amount)</span>
+                    Transactions — {openCat}
+                    <span className="ml-2 text-xs font-normal text-gray-400">
+                      ({dateFrom} to {dateTo} · hover amount and click ✎ to edit)
+                    </span>
                   </h3>
-                  <button onClick={() => window.print()}
-                    className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
-                    style={{ background: B.darkBrown, color: B.goldLight }}>Print</button>
+                  <div className="flex gap-2">
+                    <button onClick={() => window.print()}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                      style={{ background: B.darkBrown, color: B.goldLight }}>Print</button>
+                    <button onClick={() => setOpenCat(null)}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                      style={{ background: '#f5f5f5', color: '#555' }}>Close</button>
+                  </div>
                 </div>
-                {report.recent.length === 0 ? (
+                {catTxnLoad ? (
+                  <div className="flex justify-center py-10">
+                    <div className="w-8 h-8 rounded-full border-4 animate-spin" style={{ borderColor: B.gold, borderTopColor: 'transparent' }} />
+                  </div>
+                ) : catTxns.length === 0 ? (
                   <p className="text-center py-10 text-sm" style={{ color: B.textLight }}>No transactions.</p>
                 ) : (
                   <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
@@ -451,7 +470,7 @@ export default function ExpenseCategories() {
                         </tr>
                       </thead>
                       <tbody>
-                        {report.recent.map((e, idx) => {
+                        {catTxns.map((e, idx) => {
                           const pm     = PM_STYLE[e.payment_mode] || { bg: '#f5f5f5', color: '#555', label: e.payment_mode };
                           const catObj = cats.find(c => c.name === e.category);
                           const rem    = parseFloat(e.remaining_amount || 0);
@@ -541,10 +560,10 @@ export default function ExpenseCategories() {
                       <tfoot>
                         <tr style={{ background: '#fff9ee', borderTop: `2px solid ${B.gold}` }}>
                           <td colSpan={6} className="px-4 py-3 text-sm font-bold text-right" style={{ color: B.text }}>
-                            Total ({report.recent.length} shown):
+                            Total ({catTxns.length} entr{catTxns.length === 1 ? 'y' : 'ies'}):
                           </td>
                           <td className="px-4 py-3 font-extrabold" style={{ color: B.brown }}>
-                            {fmtINR(report.recent.reduce((s, e) => s + parseFloat(e.amount || 0), 0))}
+                            {fmtINR(catTxns.reduce((s, e) => s + parseFloat(e.amount || 0), 0))}
                           </td>
                         </tr>
                       </tfoot>

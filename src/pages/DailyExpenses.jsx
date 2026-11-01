@@ -255,7 +255,7 @@ export default function DailyExpenses() {
       category: e.category, description: e.description,
       amount: e.amount, payment_mode: e.payment_mode,
       paid_to: e.paid_to || '', notes: e.notes || '',
-      supplier_id: matchedSupplier ? String(matchedSupplier.id) : '',
+      supplier_id: e.supplier_id ? String(e.supplier_id) : (matchedSupplier ? String(matchedSupplier.id) : ''),
       employee_id: e.employee_id || '',
       paid_amount: paid < amt ? String(paid) : '',  // '' = full; partial → show value
     });

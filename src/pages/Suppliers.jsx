@@ -9,7 +9,7 @@ const B = {
   gold: '#d4a017', goldLight: '#f5c842', cream: '#fdf6e3', creamMid: '#f5ead0',
 };
 
-const EMPTY = { name: '', contact_name: '', phone: '', address: '', fssai_no: '' };
+const EMPTY = { name: '', contact_name: '', phone: '', address: '', fssai_no: '', opening_balance: '', opening_date: '' };
 
 export default function Suppliers() {
   const { user, signOut } = useAuth();
@@ -52,7 +52,9 @@ export default function Suppliers() {
   const openAdd  = () => { setForm(EMPTY); setFormError(''); setEditId(null); setModal('add'); };
   const openEdit = (s) => {
     setForm({ name: s.name, contact_name: s.contact_name || '', phone: s.phone || '',
-      address: s.address || '', fssai_no: s.fssai_no || '' });
+      address: s.address || '', fssai_no: s.fssai_no || '',
+      opening_balance: s.opening_balance ? String(s.opening_balance) : '',
+      opening_date: s.opening_date ? String(s.opening_date).slice(0, 10) : '' });
     setEditId(s.id); setFormError(''); setModal('edit');
   };
   const closeModal = () => { setModal(null); setEditId(null); };
@@ -63,13 +65,16 @@ export default function Suppliers() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) { setFormError('Supplier name is required.'); return; }
+    const ob = parseFloat(form.opening_balance);
+    if (form.opening_balance !== '' && (isNaN(ob) || ob < 0)) { setFormError('Opening balance must be 0 or more.'); return; }
     setSaving(true); setFormError('');
+    const payload = { ...form, opening_balance: form.opening_balance === '' ? 0 : ob, opening_date: form.opening_date || null };
     try {
       if (modal === 'add') {
-        await createSupplier(form);
+        await createSupplier(payload);
         showToast('Supplier added!');
       } else {
-        await updateSupplier(editId, form);
+        await updateSupplier(editId, payload);
         showToast('Supplier updated!');
       }
       closeModal(); load();
@@ -168,7 +173,7 @@ export default function Suppliers() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: `linear-gradient(90deg, ${B.darkBrown}, ${B.midBrown})` }}>
-                    {['Supplier Name', 'Contact Person', 'Phone', 'Address', 'FSSAI No.', 'Status', 'Actions'].map(h => (
+                    {['Supplier Name', 'Contact Person', 'Phone', 'Address', 'FSSAI No.', 'Balance', 'Status', 'Actions'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
                         style={{ color: B.goldLight }}>{h}</th>
                     ))}
@@ -192,6 +197,11 @@ export default function Suppliers() {
                             {s.fssai_no}
                           </span>
                         ) : <span className="text-xs text-gray-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-xs font-bold whitespace-nowrap"
+                        style={{ color: s.balance > 0 ? '#dc2626' : s.balance < 0 ? '#1d4ed8' : '#16a34a' }}>
+                        {s.balance > 0 ? `₹${Number(s.balance).toFixed(2)} pending`
+                          : s.balance < 0 ? `₹${Math.abs(s.balance).toFixed(2)} advance` : 'Settled'}
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-xs font-bold px-2 py-0.5 rounded-full"
@@ -284,6 +294,24 @@ export default function Suppliers() {
                   <input name="fssai_no" value={form.fssai_no} onChange={handleChange}
                     className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none font-mono"
                     style={{ borderColor: '#e8d5a3' }} placeholder="e.g. 10019022000147" maxLength={20} />
+                </div>
+                {/* Opening balance (amount already pending before using this system) */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>
+                      Opening Balance (₹)
+                      <span className="ml-1 text-xs font-normal text-gray-400">(already pending)</span>
+                    </label>
+                    <input name="opening_balance" type="number" min="0" step="0.01" value={form.opening_balance} onChange={handleChange}
+                      className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none"
+                      style={{ borderColor: '#e8d5a3' }} placeholder="0.00" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>As of Date</label>
+                    <input name="opening_date" type="date" value={form.opening_date} onChange={handleChange}
+                      className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none"
+                      style={{ borderColor: '#e8d5a3' }} />
+                  </div>
                 </div>
                 {/* Buttons */}
                 <div className="flex gap-3 pt-2">
