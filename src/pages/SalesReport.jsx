@@ -23,11 +23,20 @@ const fmt  = (n) => parseFloat(n || 0).toFixed(2);
 const fmtN = (n) => parseFloat(n || 0).toLocaleString('en-IN');
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
-function toISO(d) { return d.toLocaleDateString('en-CA'); }   // YYYY-MM-DD, local
+// Dates are IST (same as Daily Expenses), whatever the device timezone is
+const istToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+// IST calendar date as a local-midnight Date, so presets (yesterday, week…) can do date arithmetic
+function istTodayDate() {
+  const [y, m, d] = istToday().split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+// Formats the calendar date held in a Date built by istTodayDate() (local fields)
+function toISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 function getPresetRange(preset) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = istTodayDate();
   switch (preset) {
     case 'today':
       return { dateFrom: toISO(today), dateTo: toISO(today) };
@@ -78,8 +87,8 @@ export default function SalesReport() {
 
   // Date filter state
   const [activePreset, setActivePreset] = useState('today');
-  const [dateFrom, setDateFrom]         = useState(toISO(new Date()));
-  const [dateTo,   setDateTo]           = useState(toISO(new Date()));
+  const [dateFrom, setDateFrom]         = useState(istToday());
+  const [dateTo,   setDateTo]           = useState(istToday());
 
   // Report data state
   const [data, setData]       = useState(null);
