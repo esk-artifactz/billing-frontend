@@ -189,6 +189,37 @@ export default function RawMaterialStock() {
     } catch (err) { if (!handleAuthErr(err)) showToast(err.response?.data?.detail || 'Delete failed.', false); }
   };
 
+  // ── Opening stock (first-time stock in hand; not a purchase / expense) ────
+  const [openItem, setOpenItem] = useState(null);
+  const [opQty, setOpQty]       = useState('');
+  const [opRate, setOpRate]     = useState('');
+  const [opDate, setOpDate]     = useState(today());
+  const [opErr, setOpErr]       = useState('');
+  const [opSaving, setOpSaving] = useState(false);
+  const openOpening = (it) => {
+    setOpenItem(it);
+    setOpQty(parseFloat(it.opening_qty) > 0 ? String(parseFloat(it.opening_qty)) : '');
+    setOpRate(it.opening_rate != null ? String(it.opening_rate) : (it.last_rate ? String(it.last_rate) : ''));
+    setOpDate(it.opening_date ? String(it.opening_date).slice(0, 10) : today());
+    setOpErr('');
+  };
+  const saveOpening = async () => {
+    const q = opQty === '' ? 0 : parseFloat(opQty);
+    if (isNaN(q) || q < 0) { setOpErr('Enter a valid quantity (0 to clear).'); return; }
+    if (opRate !== '' && (isNaN(parseFloat(opRate)) || parseFloat(opRate) < 0)) { setOpErr('Enter a valid rate.'); return; }
+    setOpSaving(true); setOpErr('');
+    try {
+      await updateRawMaterialItem(openItem.id, {
+        opening_qty: q, opening_rate: opRate === '' ? null : parseFloat(opRate), opening_date: opDate || null,
+      });
+      showToast(`Opening stock for ${openItem.name} set to ${fmtQty(q)} ${openItem.unit}`);
+      setOpenItem(null);
+      loadStock();
+    } catch (err) {
+      if (!handleAuthErr(err)) setOpErr(err.response?.data?.detail || 'Failed to save opening stock.');
+    } finally { setOpSaving(false); }
+  };
+
   const openLink = (it) => { setLinkItem(it); setLinkIds((it.suppliers || []).map(s => String(s.id))); };
   const saveLink = async () => {
     try {
@@ -308,7 +339,7 @@ export default function RawMaterialStock() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
-                      {['Material', 'Suppliers', 'Purchased', 'Used', 'In Stock', 'Avg Rate', 'Last Rate', 'Stock Value', 'Alert Level'].map(h => (
+                      {['Material', 'Suppliers', 'Opening', 'Purchased', 'Used', 'In Stock', 'Avg Rate', 'Last Rate', 'Stock Value', 'Alert Level'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: B.goldLight }}>{h}</th>
                       ))}
                     </tr>
@@ -329,6 +360,15 @@ export default function RawMaterialStock() {
                           ))}
                           <button onClick={() => openLink(it)} className="mt-0.5 font-bold underline" style={{ color: B.gold }}>
                             {(it.suppliers || []).length ? 'Edit' : '+ Link supplier'}
+                          </button>
+                        </td>
+                        {/* Opening stock in hand — first-time setup */}
+                        <td className="px-4 py-2.5 whitespace-nowrap text-xs">
+                          {parseFloat(it.opening_qty) > 0 && (
+                            <div className="font-semibold text-sm" style={{ color: B.darkBrown }}>{fmtQty(it.opening_qty)} {it.unit}</div>
+                          )}
+                          <button onClick={() => openOpening(it)} className="font-bold underline" style={{ color: B.gold }}>
+                            {parseFloat(it.opening_qty) > 0 ? 'Edit' : '+ Set'}
                           </button>
                         </td>
                         <td className="px-4 py-2.5 whitespace-nowrap">{fmtQty(it.purchased)} {it.unit}</td>
@@ -357,14 +397,15 @@ export default function RawMaterialStock() {
                   </tbody>
                   <tfoot>
                     <tr style={{ background: '#fff9ee', borderTop: `2px solid ${B.gold}` }}>
-                      <td colSpan={7} className="px-4 py-3 text-right text-sm font-bold" style={{ color: B.text }}>Total stock value</td>
+                      <td colSpan={8} className="px-4 py-3 text-right text-sm font-bold" style={{ color: B.text }}>Total stock value</td>
                       <td className="px-4 py-3 font-extrabold" style={{ color: B.brown }}>{fmtINR(stock?.total_value)}</td>
                       <td />
                     </tr>
                   </tfoot>
                 </table>
                 <p className="px-4 py-2 text-xs" style={{ color: B.textLight }}>
-                  In Stock = Purchased − Used (usage is recorded on the Materials &amp; Usage page). Stock value uses the average purchase rate.
+                  In Stock = Opening + Purchased − Used (usage is recorded on the Materials &amp; Usage page). Stock value uses the average rate.
+                  Use <strong>Opening → + Set</strong> to enter the stock you already have when you start — it is not added to Daily Expenses.
                 </p>
               </div>
             )}
@@ -660,6 +701,58 @@ export default function RawMaterialStock() {
           </>
         )}
       </div>
+
+      {/* Opening stock in hand */}
+      {openItem && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center px-4" style={{ background: 'rgba(45,26,14,0.55)' }}
+          onClick={() => setOpenItem(null)}>
+          <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden" style={{ background: '#fff', border: `2px solid ${B.gold}` }}
+            onClick={e => e.stopPropagation()}>
+            <div className="h-1" style={{ background: `linear-gradient(90deg,#b8860b,${B.goldLight},#b8860b)` }} />
+            <div className="p-5 space-y-3">
+              <div>
+                <h3 className="text-lg font-extrabold" style={{ color: B.brown }}>Opening Stock — {openItem.name}</h3>
+                <p className="text-xs" style={{ color: B.textLight }}>
+                  Quantity already in hand when you start tracking. Not a purchase — nothing is added to Daily Expenses.
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-bold block mb-1" style={{ color: B.textLight }}>Quantity in hand ({openItem.unit})</label>
+                <input type="number" min="0" step="any" value={opQty} autoFocus onChange={e => setOpQty(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveOpening(); }}
+                  placeholder="0" className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none" style={inp} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold block mb-1" style={{ color: B.textLight }}>Rate ₹ / {openItem.unit} (optional)</label>
+                  <input type="number" min="0" step="0.01" value={opRate} onChange={e => setOpRate(e.target.value)}
+                    placeholder="For stock value" className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none" style={inp} />
+                </div>
+                <div>
+                  <label className="text-xs font-bold block mb-1" style={{ color: B.textLight }}>As of date</label>
+                  <input type="date" value={opDate} max={today()} onChange={e => setOpDate(e.target.value)}
+                    className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none" style={inp} />
+                </div>
+              </div>
+              {opQty !== '' && opRate !== '' && (
+                <p className="text-xs font-semibold" style={{ color: B.text }}>
+                  Opening value: {fmtINR((parseFloat(opQty) || 0) * (parseFloat(opRate) || 0))}
+                </p>
+              )}
+              {opErr && <p className="text-xs font-semibold text-red-600">{opErr}</p>}
+              <div className="flex gap-3 pt-1">
+                <button onClick={() => setOpenItem(null)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: '#f5f5f5', color: '#555' }}>
+                  Cancel
+                </button>
+                <button onClick={saveOpening} disabled={opSaving} className="flex-1 py-2.5 rounded-xl text-sm font-bold disabled:opacity-60"
+                  style={{ background: `linear-gradient(135deg,#b8860b,${B.gold},${B.goldLight})`, color: B.darkBrown }}>
+                  {opSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Link suppliers to a material */}
       {linkItem && (

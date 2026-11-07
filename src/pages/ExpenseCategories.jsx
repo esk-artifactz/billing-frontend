@@ -112,7 +112,53 @@ export default function ExpenseCategories() {
 
   // Reload the open category when the date / mode filter changes
   useEffect(() => { loadCatTxns(openCat); }, [openCat, loadCatTxns]);
-  const toggleCat = (category) => setOpenCat(c => (c === category ? null : category));
+  const toggleCat = (category) => { setOpenCat(c => (c === category ? null : category)); setCatSupplier(''); };
+
+  // Supplier Payment drill-down: split by supplier (Paid To) + filter
+  const [catSupplier, setCatSupplier] = useState('');   // '' = all suppliers
+  const isSupplierCat = (openCat || '').trim().toLowerCase() === 'supplier payment';
+  const supKey = (e) => (e.paid_to || '').trim() || 'Unspecified';
+  const supplierSplit = isSupplierCat
+    ? Object.values(catTxns.reduce((acc, e) => {
+        const k = supKey(e);
+        const amt = parseFloat(e.amount || 0), paid = parseFloat(e.paid_amount ?? amt);
+        acc[k] = acc[k] || { name: k, count: 0, total: 0, paid: 0, pending: 0 };
+        acc[k].count += 1; acc[k].total += amt; acc[k].paid += paid; acc[k].pending += Math.max(amt - paid, 0);
+        return acc;
+      }, {})).sort((a, b) => b.total - a.total)
+    : [];
+  const shownTxns = isSupplierCat && catSupplier ? catTxns.filter(e => supKey(e) === catSupplier) : catTxns;
+
+  // Payment status update (Paid / Part paid / Unpaid) for one entry
+  const [statusEdit, setStatusEdit]     = useState(null);   // expense row
+  const [statusType, setStatusType]     = useState('full'); // 'full' | 'partial' | 'unpaid'
+  const [statusAmt, setStatusAmt]       = useState('');
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusErr, setStatusErr]       = useState('');
+  useEscClose(() => setStatusEdit(null), !!statusEdit);
+  const openStatus = (e) => {
+    const amt = parseFloat(e.amount || 0), paid = parseFloat(e.paid_amount ?? amt);
+    setStatusEdit(e);
+    setStatusType(paid >= amt ? 'full' : paid > 0 ? 'partial' : 'unpaid');
+    setStatusAmt(paid > 0 && paid < amt ? String(paid) : '');
+    setStatusErr('');
+  };
+  const saveStatus = async () => {
+    const amt = parseFloat(statusEdit.amount || 0);
+    const paid = statusType === 'full' ? amt : statusType === 'unpaid' ? 0 : parseFloat(statusAmt);
+    if (statusType === 'partial' && !(paid > 0 && paid < amt)) {
+      setStatusErr(`Part paid amount must be more than 0 and less than ${fmtINR(amt)}.`); return;
+    }
+    setStatusSaving(true); setStatusErr('');
+    try {
+      await updateDailyExpense(statusEdit.id, { paid_amount: paid });
+      showToast('Payment status updated!');
+      setStatusEdit(null);
+      await Promise.all([loadReport(), loadCatTxns(openCat)]);
+    } catch (err) {
+      setStatusErr(err.response?.data?.detail || 'Failed to update status.');
+    } finally { setStatusSaving(false); }
+  };
   useEffect(() => {
     if (!openCat) return;
     const t = setTimeout(() => document.getElementById('category-transactions')
@@ -459,6 +505,49 @@ export default function ExpenseCategories() {
                 ) : catTxns.length === 0 ? (
                   <p className="text-center py-10 text-sm" style={{ color: B.textLight }}>No transactions.</p>
                 ) : (
+                  <>
+                  {/* Supplier Payment → split up by supplier, pick one to see only its entries */}
+                  {isSupplierCat && (
+                    <div className="px-5 py-3 border-b space-y-2" style={{ borderColor: '#e8d5a3' }}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <label className="text-xs font-bold" style={{ color: B.textLight }}>Supplier</label>
+                        <select value={catSupplier} onChange={ev => setCatSupplier(ev.target.value)}
+                          className="border-2 rounded-lg px-2 py-1 text-sm outline-none" style={{ borderColor: '#e8d5a3' }}>
+                          <option value="">All suppliers ({supplierSplit.length})</option>
+                          {supplierSplit.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                        </select>
+                      </div>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr style={{ background: '#fff9ee' }}>
+                            {['Supplier', 'Entries', 'Total', 'Paid', 'Pending', 'Share'].map(h => (
+                              <th key={h} className="px-3 py-2 text-left text-xs font-bold uppercase" style={{ color: B.textLight }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {supplierSplit.map(s => {
+                            const all = supplierSplit.reduce((t, x) => t + x.total, 0) || 1;
+                            const sel = catSupplier === s.name;
+                            return (
+                              <tr key={s.name} onClick={() => setCatSupplier(sel ? '' : s.name)}
+                                className="cursor-pointer hover:bg-amber-50"
+                                style={{ borderTop: '1px solid #f0e0c0', background: sel ? '#fff3d6' : undefined }}>
+                                <td className="px-3 py-2 font-semibold" style={{ color: B.darkBrown }}>{s.name}</td>
+                                <td className="px-3 py-2 text-xs" style={{ color: B.textLight }}>{s.count}</td>
+                                <td className="px-3 py-2 font-bold" style={{ color: B.brown }}>{fmtINR(s.total)}</td>
+                                <td className="px-3 py-2" style={{ color: '#16a34a' }}>{fmtINR(s.paid)}</td>
+                                <td className="px-3 py-2 font-semibold" style={{ color: s.pending > 0 ? '#dc2626' : '#16a34a' }}>
+                                  {s.pending > 0 ? fmtINR(s.pending) : 'Settled'}
+                                </td>
+                                <td className="px-3 py-2 text-xs" style={{ color: B.textLight }}>{((s.total / all) * 100).toFixed(1)}%</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                   <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                     <table className="w-full text-sm">
                       <thead>
@@ -470,7 +559,7 @@ export default function ExpenseCategories() {
                         </tr>
                       </thead>
                       <tbody>
-                        {catTxns.map((e, idx) => {
+                        {shownTxns.map((e, idx) => {
                           const pm     = PM_STYLE[e.payment_mode] || { bg: '#f5f5f5', color: '#555', label: e.payment_mode };
                           const catObj = cats.find(c => c.name === e.category);
                           const rem    = parseFloat(e.remaining_amount || 0);
@@ -513,6 +602,10 @@ export default function ExpenseCategories() {
                                   <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                                     style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}>Unpaid</span>
                                 )}
+                                <button onClick={() => openStatus(e)} title="Update payment status"
+                                  className="block mt-1 text-xs font-bold underline" style={{ color: B.gold }}>
+                                  Update
+                                </button>
                               </td>
                               {/* Amount — inline editable */}
                               <td className="px-4 py-2.5 whitespace-nowrap">
@@ -560,15 +653,16 @@ export default function ExpenseCategories() {
                       <tfoot>
                         <tr style={{ background: '#fff9ee', borderTop: `2px solid ${B.gold}` }}>
                           <td colSpan={6} className="px-4 py-3 text-sm font-bold text-right" style={{ color: B.text }}>
-                            Total ({catTxns.length} entr{catTxns.length === 1 ? 'y' : 'ies'}):
+                            Total ({shownTxns.length} entr{shownTxns.length === 1 ? 'y' : 'ies'}{catSupplier ? ` · ${catSupplier}` : ''}):
                           </td>
                           <td className="px-4 py-3 font-extrabold" style={{ color: B.brown }}>
-                            {fmtINR(catTxns.reduce((s, e) => s + parseFloat(e.amount || 0), 0))}
+                            {fmtINR(shownTxns.reduce((s, e) => s + parseFloat(e.amount || 0), 0))}
                           </td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
+                  </>
                 )}
               </div>
             )}
@@ -580,6 +674,64 @@ export default function ExpenseCategories() {
 
         )}
       </div>
+
+      {/* ── Update payment status (Paid / Part paid / Unpaid) ─────────────────── */}
+      {statusEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(45,26,14,0.55)' }}
+          onClick={() => setStatusEdit(null)}>
+          <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden" style={{ background: '#fff', border: `2px solid ${B.gold}` }}
+            onClick={ev => ev.stopPropagation()}>
+            <div className="h-1" style={{ background: `linear-gradient(90deg,#b8860b,${B.goldLight},#b8860b)` }} />
+            <div className="p-5 space-y-3">
+              <div>
+                <h3 className="text-lg font-extrabold" style={{ color: B.brown }}>Update Payment Status</h3>
+                <p className="text-xs" style={{ color: B.textLight }}>
+                  {statusEdit.expense_date?.slice(0, 10)} · {statusEdit.paid_to || statusEdit.description} · Bill {fmtINR(statusEdit.amount)}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {[['full', 'Paid'], ['partial', 'Part paid'], ['unpaid', 'Unpaid']].map(([k, label]) => (
+                  <button key={k} onClick={() => setStatusType(k)}
+                    className="flex-1 py-2 rounded-lg text-xs font-bold transition-all"
+                    style={statusType === k
+                      ? { background: B.gold, color: B.darkBrown, border: `2px solid ${B.gold}` }
+                      : { background: '#fff', color: B.text, border: '2px solid #e8d5a3' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {statusType === 'partial' && (
+                <input type="number" min="0" step="0.01" value={statusAmt} autoFocus
+                  onChange={ev => setStatusAmt(ev.target.value)}
+                  onKeyDown={ev => { if (ev.key === 'Enter') saveStatus(); }}
+                  placeholder="Amount paid ₹" className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none"
+                  style={{ borderColor: '#e8d5a3' }} />
+              )}
+              {(() => {
+                const amt = parseFloat(statusEdit.amount || 0);
+                const paid = statusType === 'full' ? amt : statusType === 'unpaid' ? 0 : (parseFloat(statusAmt) || 0);
+                return (
+                  <div className="flex justify-between text-xs font-semibold" style={{ color: B.text }}>
+                    <span>Paid {fmtINR(paid)}</span>
+                    <span style={{ color: amt - paid > 0 ? '#dc2626' : '#16a34a' }}>
+                      {amt - paid > 0 ? `Pending ${fmtINR(amt - paid)}` : 'Fully paid'}
+                    </span>
+                  </div>
+                );
+              })()}
+              {statusErr && <p className="text-xs font-semibold text-red-600">{statusErr}</p>}
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setStatusEdit(null)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+                  style={{ background: '#f5f5f5', color: '#555' }}>Cancel</button>
+                <button onClick={saveStatus} disabled={statusSaving} className="flex-1 py-2.5 rounded-xl text-sm font-bold disabled:opacity-60"
+                  style={{ background: `linear-gradient(135deg,#b8860b,${B.gold},${B.goldLight})`, color: B.darkBrown }}>
+                  {statusSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Unpaid Drawer ──────────────────────────────────────────────────────── */}
       {showUnpaid && report && (
