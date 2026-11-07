@@ -156,6 +156,8 @@ export default function Dashboard() {
               <NavBtn onClick={() => navigate('/purchase-order')} color="#b8500a">Create Purchase Order</NavBtn>
               <NavBtn onClick={() => navigate('/receive-stock')} color="#1a6e3a">Receive Stock</NavBtn>
               <NavBtn onClick={() => navigate('/daily-expenses')} color="#b45309">Daily Expenses</NavBtn>
+              <NavBtn onClick={() => navigate('/raw-material-stock')} color="#0d9488">Raw Material Stock</NavBtn>
+              <NavBtn onClick={() => navigate('/raw-materials')} color="#115e59">Raw Materials &amp; Usage</NavBtn>
               <NavBtn onClick={() => navigate('/expense-categories')} color="#92400e">Expense Report</NavBtn>
               <NavBtn onClick={() => navigate('/contacts')} color="#4f6d7a">Contact Book</NavBtn>
               <NavBtn onClick={() => navigate('/sales-history')} color="#2d6a4f">Bill History</NavBtn>
@@ -177,6 +179,11 @@ export default function Dashboard() {
               <NavBtn onClick={() => navigate('/purchase-order')} color="#b8500a">Create Purchase Order</NavBtn>
               <NavBtn onClick={() => navigate('/receive-stock')} color="#1a6e3a">Receive Stock</NavBtn>
               <NavBtn onClick={() => navigate('/daily-expenses')} color="#b45309">Daily Expenses</NavBtn>
+              <NavBtn onClick={() => navigate('/raw-material-stock')} color="#0d9488">Raw Material Stock</NavBtn>
+              <NavBtn onClick={() => navigate('/raw-materials')} color="#115e59">Raw Materials &amp; Usage</NavBtn>
+              <NavBtn onClick={() => navigate('/suppliers')} color="#7b3fa0">Manage Suppliers</NavBtn>
+              <NavBtn onClick={() => navigate('/sales-return')} color="#dc2626">Sales Return</NavBtn>
+              <NavBtn onClick={() => navigate('/purchase-return')} color="#ea580c">Purchase Return</NavBtn>
               <NavBtn onClick={() => navigate('/contacts')} color="#4f6d7a">Contact Book</NavBtn>
               <NavBtn onClick={() => navigate('/sales-history')} color="#2d6a4f">Bill History</NavBtn>
               <NavBtn onClick={() => navigate('/attendance')} color="#1a5276">Mark Attendance</NavBtn>

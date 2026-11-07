@@ -97,7 +97,8 @@ export default function SalesReturn() {
     if (!invoiceSearch.trim() && !searchDate) { setSearchErr('Enter invoice number or select date.'); return; }
     setSearching(true); setSearchErr(''); setSearchResults([]);
     try {
-      const res = await getSalesHistory({ date: searchDate, search: invoiceSearch.trim() });
+      // purpose=return lets Cashiers find bills from earlier days (Bill History is today-only for them)
+      const res = await getSalesHistory({ date: searchDate, search: invoiceSearch.trim(), purpose: 'return' });
       const sales = res.data.sales || [];
       setSearchResults(sales);
       if (!sales.length) setSearchErr('No sales found for that search.');

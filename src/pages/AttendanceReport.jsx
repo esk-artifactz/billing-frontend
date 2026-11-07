@@ -8,7 +8,9 @@ import {
   getAttendanceReport, getAttendanceDetail, markSalaryPaid, listSalaryPayments,
   giveAdvance, listAdvances,
   updateSalaryPayment, deleteSalaryPayment, updateAdvance, deleteAdvance,
+  setSalaryBonus,
 } from '../api/client';
+import EmployeeLoans from '../components/EmployeeLoans';
 
 // ─── Brand colours ────────────────────────────────────────────────────────────
 const B = {
@@ -31,6 +33,8 @@ const STATUS_META = {
 };
 
 const EMPTY_EMP   = { emp_code: '', full_name: '', phone: '', role: 'Staff', default_designation_id: '', designation_effective_from: '', join_date: '' };
+// Bonus is added per employee for one month at a time, from the monthly report
+const BONUS_TYPES = ['Attendance', 'Festival', 'Performance', 'Other'];
 const EMPTY_DESIG = { name: '', daily_rate: '', ot_rate: '', description: '' };
 
 function currentMonth() {
@@ -407,9 +411,40 @@ export default function AttendanceReport() {
     } catch { showToast('Failed.', false); }
   };
 
+  // ── Bonus — entered for the selected month only (shows only in that month) ──
+  const [bonusModal,  setBonusModal]  = useState(null);   // report row
+  const [bonusType,   setBonusType]   = useState(BONUS_TYPES[0]);
+  const [bonusAmt,    setBonusAmt]    = useState('');
+  const [bonusSaving, setBonusSaving] = useState(false);
+  const [bonusError,  setBonusError]  = useState('');
+  useEscClose(() => setBonusModal(null), !!bonusModal);   // must come after bonusModal is declared
+  const openBonusModal = (row) => {
+    setBonusModal(row);
+    setBonusType(row.bonus_granted_type || BONUS_TYPES[0]);
+    setBonusAmt(row.bonus_eligible ? String(row.bonus) : '');
+    setBonusError('');
+  };
+  const saveBonus = async (remove = false) => {
+    if (!remove && !(parseFloat(bonusAmt) > 0)) { setBonusError('Enter a bonus amount greater than 0.'); return; }
+    setBonusSaving(true); setBonusError('');
+    try {
+      await setSalaryBonus({
+        employee_id: bonusModal.employee_id, month, eligible: !remove,
+        bonus_type: bonusType, amount: remove ? undefined : parseFloat(bonusAmt),
+      });
+      showToast(remove ? `Bonus removed for ${monthLabel(month)}`
+                       : `${bonusType} bonus ${inr(bonusAmt)} added for ${monthLabel(month)}`);
+      setBonusModal(null);
+      loadReport(month);
+    } catch (err) {
+      setBonusError(err.response?.data?.detail || 'Failed to save bonus.');
+    } finally { setBonusSaving(false); }
+  };
+
   // ── Pay modal ─────────────────────────────────────────────────────────────
   const openPayModal = (row) => {
-    setPayModal({ employee_id: row.employee_id, full_name: row.full_name, balance: row.balance_due });
+    setPayModal({ employee_id: row.employee_id, full_name: row.full_name, balance: row.balance_due,
+                  previous: row.previous_balance });
     setPayAmount(row.balance_due > 0 ? String(row.balance_due) : '');
     setPayNotes(''); setPayError('');
   };
@@ -488,6 +523,9 @@ export default function AttendanceReport() {
   const totalAdv     = report.reduce((s, r) => s + parseFloat(r.total_advance || 0), 0);
   const totalBalance = report.reduce((s, r) => s + parseFloat(r.balance_due || 0), 0);
   const totalOTPay   = report.reduce((s, r) => s + parseFloat(r.ot_pay || 0), 0);
+  const totalBonus   = report.reduce((s, r) => s + parseFloat(r.bonus || 0), 0);
+  const totalPrev    = report.reduce((s, r) => s + parseFloat(r.previous_balance || 0), 0);
+  const totalEmi     = report.reduce((s, r) => s + parseFloat(r.loan_emi || 0), 0);
 
   // Designation selected in employee form
   const selectedDesig = designations.find(d => String(d.id) === String(empForm.default_designation_id));
@@ -496,6 +534,7 @@ export default function AttendanceReport() {
     { id: 'report',       label: '📊 Monthly Report' },
     { id: 'employees',    label: '👷 Employees' },
     { id: 'designations', label: '🏷️ Designations' },
+    { id: 'loans',        label: '💳 Loans / EMI' },
   ];
 
   return (
@@ -572,7 +611,7 @@ export default function AttendanceReport() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
-                        {['Employee','Designation','P','H','L','A','Eff. Days','Regular Pay','OT Pay','Total Earned','Advances','Paid','Balance','Actions'].map(h => (
+                        {['Employee','Designation','P','H','L','A','Eff. Days','Regular Pay','OT Pay','Total Earned','Bonus','Prev. Balance','Advances','Loan EMI','Paid','Balance','Actions'].map(h => (
                           <th key={h} className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wide"
                             style={{ color: B.goldLight }}>{h}</th>
                         ))}
@@ -627,8 +666,34 @@ export default function AttendanceReport() {
                           <td className="px-3 py-3 font-bold whitespace-nowrap" style={{ color: '#1d4ed8' }}>
                             {inr(row.gross_earned)}
                           </td>
+                          {/* Bonus — added for this month only */}
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            {row.bonus_eligible ? (
+                              <button onClick={() => openBonusModal(row)} title="Edit / remove this month's bonus"
+                                className="text-left text-xs font-semibold" style={{ color: '#b45309' }}>
+                                +{inr(row.bonus)}
+                                <span className="block font-normal">{row.bonus_granted_type || 'Bonus'} ✎</span>
+                              </button>
+                            ) : (
+                              <button onClick={() => openBonusModal(row)}
+                                className="text-xs font-bold px-2 py-1 rounded-lg active:scale-95"
+                                style={{ background: '#fef3c7', color: '#b45309' }}>+ Bonus</button>
+                            )}
+                          </td>
+                          {/* Pending (+) / overpaid (−) carried from previous months */}
+                          <td className="px-3 py-3 font-semibold whitespace-nowrap"
+                            style={{ color: row.previous_balance > 0 ? '#dc2626' : row.previous_balance < 0 ? '#7c3aed' : '#9ca3af' }}
+                            title="Balance carried forward from previous months">
+                            {row.previous_balance ? inr(row.previous_balance) : '—'}
+                            {row.previous_balance < 0 && <span className="block text-xs font-normal">(overpaid)</span>}
+                          </td>
                           <td className="px-3 py-3 font-semibold whitespace-nowrap" style={{ color: '#7c3aed' }}>
                             {inr(row.total_advance)}
+                          </td>
+                          {/* Loan EMI deducted this month */}
+                          <td className="px-3 py-3 font-semibold whitespace-nowrap"
+                            style={{ color: parseFloat(row.loan_emi) > 0 ? '#dc2626' : '#9ca3af' }}>
+                            {parseFloat(row.loan_emi) > 0 ? `−${inr(row.loan_emi)}` : '—'}
                           </td>
                           <td className="px-3 py-3 font-semibold whitespace-nowrap" style={{ color: '#16a34a' }}>
                             {inr(row.total_paid)}
@@ -665,7 +730,10 @@ export default function AttendanceReport() {
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#7dd3fc' }}>{inr(totalEarned - totalOTPay)}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#fbbf24' }}>{totalOTPay > 0 ? `+${inr(totalOTPay)}` : '—'}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: B.goldLight }}>{inr(totalEarned)}</td>
+                        <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#fcd34d' }}>{totalBonus > 0 ? `+${inr(totalBonus)}` : '—'}</td>
+                        <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: totalPrev > 0 ? '#fca5a5' : '#c4b5fd' }}>{totalPrev ? inr(totalPrev) : '—'}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#c4b5fd' }}>{inr(totalAdv)}</td>
+                        <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#fca5a5' }}>{totalEmi > 0 ? `−${inr(totalEmi)}` : '—'}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#86efac' }}>{inr(totalPaid)}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs"
                           style={{ color: totalBalance > 0 ? '#fca5a5' : '#86efac' }}>{inr(totalBalance)}</td>
@@ -678,9 +746,15 @@ export default function AttendanceReport() {
             )}
             <p className="text-xs px-1" style={{ color: '#a07020' }}>
               P = Present · H = Half Day · L = Leave (unpaid) · A = Absent · Effective = P + H×0.5 ·
-              Total Earned = Regular Pay + OT Pay · Balance = Total − Advances − Paid
+              Total Earned = Regular Pay + OT Pay · Prev. Balance = pending (+) / overpaid (−) carried from earlier months ·
+              Balance = Total Earned + Bonus + Prev. Balance − Advances − Loan EMI − Paid (carries into next month)
             </p>
           </div>
+        )}
+
+        {/* ━━━━━━━━━ LOANS / EMI TAB ━━━━━━━━━ */}
+        {tab === 'loans' && (
+          <EmployeeLoans employees={employees} showToast={showToast} onChanged={() => loadReport(month)} />
         )}
 
         {/* ━━━━━━━━━ EMPLOYEES TAB ━━━━━━━━━ */}
@@ -1008,6 +1082,66 @@ export default function AttendanceReport() {
         </div>
       )}
 
+      {/* ━━━━━━━━━ Bonus Modal — this month only ━━━━━━━━━ */}
+      {bonusModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center px-4"
+          style={{ background: 'rgba(45,26,14,0.55)' }}>
+          <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden"
+            style={{ background: '#fff', border: `2px solid ${B.gold}` }}>
+            <div className="h-1" style={{ background: `linear-gradient(90deg,#b8860b,${B.goldLight},#b8860b)` }} />
+            <div className="p-6 space-y-3">
+              <div>
+                <h3 className="text-lg font-extrabold" style={{ color: B.brown }}>
+                  {bonusModal.bonus_eligible ? 'Edit Bonus' : 'Add Bonus'}
+                </h3>
+                <p className="text-sm" style={{ color: '#a07020' }}>
+                  {bonusModal.full_name} · <strong>{monthLabel(month)}</strong> only
+                </p>
+              </div>
+              {bonusError && (
+                <div className="px-3 py-2 rounded-lg text-sm font-semibold" style={{ background: '#fee2e2', color: '#dc2626' }}>
+                  {bonusError}
+                </div>
+              )}
+              <div>
+                <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>Bonus Type</label>
+                <select value={bonusType} onChange={e => setBonusType(e.target.value)} className={inpCls} style={inpSty}>
+                  {BONUS_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>Bonus Amount (₹)</label>
+                <input type="number" min="0" step="0.01" value={bonusAmt} autoFocus
+                  onChange={e => setBonusAmt(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveBonus(); }}
+                  placeholder="0.00" className={inpCls} style={inpSty} />
+              </div>
+              <p className="text-xs" style={{ color: '#a07020' }}>
+                Added to {monthLabel(month)} salary; other months are not affected.
+              </p>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setBonusModal(null)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: '#f5f5f5', color: '#555' }}>
+                  Cancel
+                </button>
+                {bonusModal.bonus_eligible && (
+                  <button onClick={() => saveBonus(true)} disabled={bonusSaving}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold disabled:opacity-60"
+                    style={{ background: '#fee2e2', color: '#dc2626' }}>
+                    Remove
+                  </button>
+                )}
+                <button onClick={() => saveBonus()} disabled={bonusSaving}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold disabled:opacity-60"
+                  style={{ background: `linear-gradient(135deg,#b8860b,${B.gold},${B.goldLight})`, color: B.darkBrown }}>
+                  {bonusSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ━━━━━━━━━ Pay Modal ━━━━━━━━━ */}
       {payModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center px-4"
@@ -1022,6 +1156,11 @@ export default function AttendanceReport() {
                 {payModal.balance > 0 && (
                   <span className="ml-2 font-semibold" style={{ color: '#dc2626' }}>
                     Balance due: {inr(payModal.balance)}
+                  </span>
+                )}
+                {payModal.previous > 0 && (
+                  <span className="block text-xs mt-0.5" style={{ color: '#a07020' }}>
+                    includes {inr(payModal.previous)} pending from previous months
                   </span>
                 )}
               </p>
@@ -1290,7 +1429,15 @@ export default function AttendanceReport() {
                         { label: 'Regular Pay',         val: detailSummary.base_earned,   color: '#7dd3fc' },
                         { label: 'OT Pay',              val: detailSummary.total_ot_pay,  color: '#fbbf24', showIf: parseFloat(detailSummary.total_ot_pay) > 0 },
                         { label: 'Gross Earned',        val: detailSummary.gross_earned,  color: '#93c5fd' },
+                        { label: `Bonus${detailSummary.bonus_type ? ` (${detailSummary.bonus_type})` : ''}`,
+                          val: detailSummary.bonus, color: '#fcd34d', showIf: parseFloat(detailSummary.bonus) > 0 },
+                        { label: parseFloat(detailSummary.previous_balance) < 0 ? 'Overpaid in previous months' : 'Pending from previous months',
+                          val: Math.abs(parseFloat(detailSummary.previous_balance || 0)), color: '#fca5a5',
+                          neg: parseFloat(detailSummary.previous_balance) < 0,
+                          showIf: parseFloat(detailSummary.previous_balance || 0) !== 0 },
                         { label: 'Advances Given',      val: detailSummary.total_advance, color: '#c4b5fd', neg: true },
+                        { label: 'Loan EMI',            val: detailSummary.loan_emi,      color: '#fca5a5', neg: true,
+                          showIf: parseFloat(detailSummary.loan_emi) > 0 },
                         { label: 'Salary Paid',         val: detailSummary.total_paid,    color: '#86efac', neg: true },
                       ].filter(r => r.showIf === undefined || r.showIf).map(r => (
                         <div key={r.label} className="flex justify-between items-center">

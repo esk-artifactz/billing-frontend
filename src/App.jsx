@@ -24,6 +24,8 @@ import StockValuation from './pages/StockValuation';
 import BarcodeLabels from './pages/BarcodeLabels';
 import SalesReturn from './pages/SalesReturn';
 import PurchaseReturn from './pages/PurchaseReturn';
+import RawMaterials from './pages/RawMaterials';
+import RawMaterialStock from './pages/RawMaterialStock';
 
 export default function App() {
   return (
@@ -134,11 +136,11 @@ export default function App() {
             }
           />
 
-          {/* Suppliers — Admin only */}
+          {/* Suppliers — Cashier & Admin (opening balance / deactivate / delete are Admin-only) */}
           <Route
             path="/suppliers"
             element={
-              <ProtectedRoute adminOnly>
+              <ProtectedRoute>
                 <Suppliers />
               </ProtectedRoute>
             }
@@ -224,22 +226,42 @@ export default function App() {
             }
           />
 
-          {/* Sales Return */}
+          {/* Sales Return — Cashier & Admin (deleting a return is Admin-only) */}
           <Route
             path="/sales-return"
             element={
-              <ProtectedRoute adminOnly>
+              <ProtectedRoute>
                 <SalesReturn />
               </ProtectedRoute>
             }
           />
 
-          {/* Purchase Return */}
+          {/* Purchase Return — Cashier & Admin (deleting a return is Admin-only) */}
           <Route
             path="/purchase-return"
             element={
-              <ProtectedRoute adminOnly>
+              <ProtectedRoute>
                 <PurchaseReturn />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Raw materials — master list + daily usage (Cashier & Admin) */}
+          <Route
+            path="/raw-materials"
+            element={
+              <ProtectedRoute>
+                <RawMaterials />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Raw material stock & purchases → Daily Expense "Raw Material Cost" (Cashier & Admin) */}
+          <Route
+            path="/raw-material-stock"
+            element={
+              <ProtectedRoute>
+                <RawMaterialStock />
               </ProtectedRoute>
             }
           />

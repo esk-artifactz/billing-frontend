@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getProducts, createProduct, updateProduct, deleteProduct, getCategories, getSuppliers } from '../api/client';
+import { getProducts, createProduct, updateProduct, deleteProduct, getCategories, getSuppliers, getSubcategories } from '../api/client';
 
 const B = {
   darkBrown: '#2d1a0e',
@@ -101,7 +101,14 @@ export default function Products() {
     catch { /* silent */ }
   }, []);
 
-  useEffect(() => { fetchProducts(); fetchCategories(); fetchSuppliers(); }, [fetchProducts, fetchCategories, fetchSuppliers]);
+  // Subcategories (managed on the Categories page) — suggestions for the selected category
+  const [subcats, setSubcats] = useState([]);
+  const fetchSubcats = useCallback(async () => {
+    try { const res = await getSubcategories({ active: 1 }); setSubcats(res.data.subcategories || []); }
+    catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { fetchProducts(); fetchCategories(); fetchSuppliers(); fetchSubcats(); }, [fetchProducts, fetchCategories, fetchSuppliers, fetchSubcats]);
 
   const openAdd  = () => { setForm(EMPTY_FORM); setFormError(''); setModal('add'); };
   const openEdit = (p) => {
@@ -161,14 +168,14 @@ export default function Products() {
 
   const handleAdd = async (e) => {
     e.preventDefault(); setSaving(true); setFormError('');
-    try { await createProduct(buildPayload()); closeModal(); fetchProducts(); }
+    try { await createProduct(buildPayload()); closeModal(); fetchProducts(); fetchSubcats(); }
     catch (err) { setFormError(err.response?.data?.detail || 'Failed to add product.'); }
     finally { setSaving(false); }
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault(); setSaving(true); setFormError('');
-    try { await updateProduct(selected.id, buildPayload()); closeModal(); fetchProducts(); }
+    try { await updateProduct(selected.id, buildPayload()); closeModal(); fetchProducts(); fetchSubcats(); }
     catch (err) { setFormError(err.response?.data?.detail || 'Failed to update product.'); }
     finally { setSaving(false); }
   };
@@ -424,8 +431,14 @@ export default function Products() {
                   </div>
                   <div>
                     <Label>Subcategory</Label>
+                    {/* Pick from the category's subcategories, or type a new one (added to the list on save) */}
                     <input type="text" name="subcategory" value={form.subcategory} onChange={handleChange}
-                      placeholder="e.g., Green Tea" style={inputSty} />
+                      list="product-subcategory-options" autoComplete="off"
+                      placeholder={form.category_id ? 'Select or type…' : 'Choose a category first'} style={inputSty} />
+                    <datalist id="product-subcategory-options">
+                      {subcats.filter(s => String(s.category_id) === String(form.category_id))
+                        .map(s => <option key={s.id} value={s.name} />)}
+                    </datalist>
                   </div>
                   <div>
                     <Label required>Unit</Label>

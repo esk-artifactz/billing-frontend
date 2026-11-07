@@ -321,13 +321,12 @@ export default function SalesHistory() {
                               style={{ background: `linear-gradient(135deg,#b8860b,${B.gold})`, color: '#fff' }}>
                               {loadingBill === s.invoice_number ? 'Loading…' : 'View Bill'}
                             </button>
-                            {!isCashier && (
-                              <button onClick={() => openEdit(s)}
-                                className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
-                                style={{ background: '#dbeafe', color: '#1d4ed8' }}>
-                                Edit
-                              </button>
-                            )}
+                            {/* Edit — Admin and Cashier (Cashier only sees today's bills) */}
+                            <button onClick={() => openEdit(s)}
+                              className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                              style={{ background: '#dbeafe', color: '#1d4ed8' }}>
+                              Edit
+                            </button>
                           </div>
                         </td>
                       </tr>

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   getRawMaterialItems, createRawMaterialItem, updateRawMaterialItem, deleteRawMaterialItem,
   getRawMaterialConsumption, createRawMaterialConsumption, deleteRawMaterialConsumption,
+  getCategories, getSubcategories,
 } from '../api/client';
 
 const B = {
@@ -13,11 +14,6 @@ const B = {
   text: '#7a4e08', textLight: '#a07020',
 };
 
-const ITEM_CATEGORIES = [
-  'Flour & Grains', 'Pulses & Legumes', 'Dairy', 'Oil & Ghee',
-  'Spices & Masalas', 'Beverages & Powders', 'Vegetables', 'Fruits',
-  'Sweeteners', 'Packaging', 'Miscellaneous',
-];
 const USED_FOR_OPTIONS = [
   'Tea', 'Bonda', 'Bajji', 'Sandwich', 'Juice', 'Snacks', 'Sweets', 'Other',
 ];
@@ -25,7 +21,8 @@ const USED_FOR_OPTIONS = [
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // IST
 const fmtN  = (n, dec = 3) => parseFloat(n || 0).toLocaleString('en-IN', { maximumFractionDigits: dec });
 
-const EMPTY_ITEM = { name: '', unit: 'kg', category: '' };
+// category_id / subcategory_id come from the Categories page (category + its subcategories)
+const EMPTY_ITEM = { name: '', unit: 'kg', category_id: '', subcategory_id: '' };
 const EMPTY_ENTRY = { item_id: '', quantity_used: '', used_for: '', notes: '', consumption_date: today() };
 
 export default function RawMaterials() {
@@ -93,25 +90,45 @@ export default function RawMaterials() {
   useEffect(() => { loadConsumption(); }, [loadConsumption]);
 
   // ── Item CRUD ─────────────────────────────────────────────────────────────
-  const openAddItem = () => { setItemForm(EMPTY_ITEM); setItemErr(''); setEditItemId(null); setItemModal('add'); };
+  // Categories + subcategories (managed on the Categories page)
+  const [cats, setCats]       = useState([]);
+  const [subcats, setSubcats] = useState([]);
+  useEffect(() => {
+    getCategories().then(r => setCats(r.data.categories || [])).catch(() => {});
+    getSubcategories({ active: 1 }).then(r => setSubcats(r.data.subcategories || [])).catch(() => {});
+  }, []);
+  const [editLegacyCat, setEditLegacyCat] = useState('');   // old free-text category of the item being edited
+
+  const openAddItem = () => { setItemForm(EMPTY_ITEM); setItemErr(''); setEditItemId(null); setEditLegacyCat(''); setItemModal('add'); };
   const openEditItem = (it) => {
-    setItemForm({ name: it.name, unit: it.unit, category: it.category || '' });
+    setItemForm({ name: it.name, unit: it.unit, category_id: it.category_id ? String(it.category_id) : '',
+                  subcategory_id: it.subcategory_id ? String(it.subcategory_id) : '' });
+    setEditLegacyCat(!it.category_id && it.category ? it.category : '');
     setEditItemId(it.id); setItemErr(''); setItemModal('edit');
   };
   const closeItemModal = () => { setItemModal(null); setEditItemId(null); };
   useEscClose(closeItemModal, !!itemModal);
-  const handleItemChange = (e) => setItemForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  const handleItemChange = (e) => setItemForm(f => ({
+    ...f, [e.target.name]: e.target.value,
+    ...(e.target.name === 'category_id' ? { subcategory_id: '' } : {}),   // new category → pick its subcategory again
+  }));
 
   const handleItemSubmit = async (ev) => {
     ev.preventDefault();
     if (!itemForm.name.trim()) { setItemErr('Name is required.'); return; }
     setItemSaving(true); setItemErr('');
+    const payload = { name: itemForm.name, unit: itemForm.unit };
+    // Keep an old free-text category untouched unless a category is chosen
+    if (itemForm.category_id || itemForm.subcategory_id || !editLegacyCat) {
+      payload.category_id    = itemForm.category_id ? Number(itemForm.category_id) : null;
+      payload.subcategory_id = itemForm.subcategory_id ? Number(itemForm.subcategory_id) : null;
+    }
     try {
       if (itemModal === 'add') {
-        await createRawMaterialItem(itemForm);
+        await createRawMaterialItem(payload);
         showToast('Item added!');
       } else {
-        await updateRawMaterialItem(editItemId, itemForm);
+        await updateRawMaterialItem(editItemId, payload);
         showToast('Item updated!');
       }
       closeItemModal(); loadItems();
@@ -562,13 +579,37 @@ export default function RawMaterials() {
                   </div>
                   <div>
                     <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>Category</label>
-                    <select name="category" value={itemForm.category} onChange={handleItemChange}
+                    <select name="category_id" value={itemForm.category_id} onChange={handleItemChange}
                       className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none"
                       style={{ borderColor: '#e8d5a3' }}>
                       <option value="">— None —</option>
-                      {ITEM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>Subcategory</label>
+                  {(() => {
+                    const opts = subcats.filter(s => String(s.category_id) === String(itemForm.category_id));
+                    return (
+                      <select name="subcategory_id" value={itemForm.subcategory_id} onChange={handleItemChange}
+                        disabled={!itemForm.category_id}
+                        className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none disabled:bg-gray-50"
+                        style={{ borderColor: '#e8d5a3' }}>
+                        <option value="">
+                          {!itemForm.category_id ? 'Choose a category first' : opts.length ? '— None —' : 'No subcategories — add them on the Categories page'}
+                        </option>
+                        {opts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    );
+                  })()}
+                  {editLegacyCat && !itemForm.category_id && (
+                    <p className="text-xs mt-1" style={{ color: B.textLight }}>Current (old) category: {editLegacyCat}</p>
+                  )}
+                  <button type="button" onClick={() => navigate('/categories')}
+                    className="text-xs font-semibold underline mt-1" style={{ color: B.gold }}>
+                    Manage categories &amp; subcategories
+                  </button>
                 </div>
                 <div className="flex gap-3 pt-1">
                   <button type="button" onClick={closeItemModal}

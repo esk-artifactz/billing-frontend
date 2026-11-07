@@ -28,6 +28,9 @@ export default function PurchaseOrder() {
   // ── PO header ──────────────────────────────────────────────────────────────
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
   const [poNotes,            setPoNotes]            = useState('');
+  // PO date (IST, can be back-dated) — receiving against this PO defaults to it
+  const istToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const [poDate,             setPoDate]             = useState(istToday());
 
   // ── Cart (items added to PO) ──────────────────────────────────────────────
   // { product_id, product_name, unit, ordered_qty, purchase_price, current_stock, mfg_date, expiry_date }
@@ -112,6 +115,7 @@ export default function PurchaseOrder() {
         brand:       selectedBrand || null,
         supplier_id: selectedSupplierId || null,
         notes:       poNotes || null,
+        po_date:     poDate || null,
         items: cart.map(c => ({
           product_id:     c.product_id,
           ordered_qty:    parseFloat(c.ordered_qty),
@@ -126,6 +130,7 @@ export default function PurchaseOrder() {
       setCart([]);
       setSelectedSupplierId('');
       setPoNotes('');
+      setPoDate(istToday());
       showToast(`Purchase Order ${poNum} created!`);
     } catch (err) {
       showToast(err.response?.data?.detail || 'Failed to create purchase order.', false);
@@ -216,7 +221,7 @@ export default function PurchaseOrder() {
           {/* PO Header fields */}
           <div className="rounded-2xl p-4 shadow-sm" style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
             <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#a07020' }}>Order Details</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>Supplier</label>
                 <select value={selectedSupplierId} onChange={e => setSelectedSupplierId(e.target.value)}
@@ -235,6 +240,12 @@ export default function PurchaseOrder() {
                 {selectedSupplier?.address && (
                   <p className="text-xs mt-0.5 text-gray-400">{selectedSupplier.address}</p>
                 )}
+              </div>
+              <div>
+                <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>PO Date</label>
+                <input type="date" value={poDate} max={istToday()} onChange={e => setPoDate(e.target.value)}
+                  className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none"
+                  style={{ borderColor: '#e8d5a3' }} />
               </div>
               <div>
                 <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>Notes (optional)</label>

@@ -92,6 +92,12 @@ export const updateCategory = (id, data) => api.put(`/categories/${id}`, data);
 
 export const deleteCategory = (id) => api.delete(`/categories/${id}`);
 
+// Subcategories (under a category) — products + raw materials
+export const getSubcategories   = (params = {}) => api.get('/subcategories', { params });
+export const createSubcategory  = (data)        => api.post('/subcategories', data);
+export const updateSubcategory  = (id, data)    => api.put(`/subcategories/${id}`, data);
+export const deleteSubcategory  = (id)          => api.delete(`/subcategories/${id}`);
+
 // ── Billing ───────────────────────────────────────────────────────────────
 
 export const checkout = (data) =>
@@ -167,6 +173,14 @@ export const getAttendanceDetail = (employeeId, month) =>
 // ── Salary ────────────────────────────────────────────────────────────────────
 
 export const markSalaryPaid      = (data)                  => api.post('/salary/pay', data);
+// Mark / unmark an employee bonus-eligible for a month: { employee_id, month, eligible, amount? }
+export const setSalaryBonus      = (data)                  => api.post('/salary/bonus', data);
+
+// Employee loans — EMI deducted from salary each month until closed
+export const getEmployeeLoans     = (params = {}) => api.get('/employee-loans', { params });
+export const previewEmployeeLoan  = (data)        => api.post('/employee-loans/preview', data);
+export const createEmployeeLoan   = (data)        => api.post('/employee-loans', data);
+export const deleteEmployeeLoan   = (id)          => api.delete(`/employee-loans/${id}`);
 export const listSalaryPayments  = (employee_id, month)    => api.get('/salary/payments', { params: { employee_id, month } });
 export const updateSalaryPayment = (id, data)              => api.put(`/salary/payments/${id}`, data);
 export const deleteSalaryPayment = (id)                    => api.delete(`/salary/payments/${id}`);
@@ -239,6 +253,26 @@ export const deleteDailyExpense  = (id)          => api.delete(`/daily-expenses/
 export const getExpensePayments    = (expId)          => api.get(`/daily-expenses/${expId}/payments`);
 export const addExpensePayment     = (expId, data)    => api.post(`/daily-expenses/${expId}/payments`, data);
 export const deleteExpensePayment  = (expId, payId)   => api.delete(`/daily-expenses/${expId}/payments/${payId}`);
+
+// ── Raw Materials (master list + daily usage) ─────────────────────────────────
+
+export const getRawMaterialItems           = ()          => api.get('/raw-material-items');
+export const createRawMaterialItem         = (data)      => api.post('/raw-material-items', data);
+export const updateRawMaterialItem         = (id, data)  => api.put(`/raw-material-items/${id}`, data);
+export const deleteRawMaterialItem         = (id)        => api.delete(`/raw-material-items/${id}`);
+export const getRawMaterialConsumption     = (params={}) => api.get('/raw-material-consumption', { params });
+export const createRawMaterialConsumption  = (data)      => api.post('/raw-material-consumption', data);
+export const deleteRawMaterialConsumption  = (id)        => api.delete(`/raw-material-consumption/${id}`);
+
+// ── Raw Material Stock & Purchases (purchases roll up into Daily Expenses) ────
+
+export const getRawMaterialStock       = ()          => api.get('/raw-material-stock');
+export const getRawMaterialPurchases   = (params={}) => api.get('/raw-material-purchases', { params });
+export const createRawMaterialPurchase = (data)      => api.post('/raw-material-purchases', data);
+export const updateRawMaterialPurchase = (id, data)  => api.put(`/raw-material-purchases/${id}`, data);
+export const deleteRawMaterialPurchase = (id)        => api.delete(`/raw-material-purchases/${id}`);
+export const setRawMaterialSuppliers   = (itemId, supplierIds) =>
+  api.put(`/raw-material-items/${itemId}/suppliers`, { supplier_ids: supplierIds });
 
 
 // ── Contact Categories ────────────────────────────────────────────────────────

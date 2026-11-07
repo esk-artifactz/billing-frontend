@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getCategories, createCategory, updateCategory, deleteCategory } from '../api/client';
+import {
+  getCategories, createCategory, updateCategory, deleteCategory,
+  getSubcategories, createSubcategory, updateSubcategory, deleteSubcategory,
+} from '../api/client';
 
 const B = {
   darkBrown: '#2d1a0e',
@@ -59,6 +62,46 @@ export default function Categories() {
   }, [navigate, signOut]);
 
   useEffect(() => { fetchCategories(); }, [fetchCategories]);
+
+  // ── Subcategories ─────────────────────────────────────────────────────────
+  const [subcats, setSubcats]       = useState([]);
+  const [openCatId, setOpenCatId]   = useState(null);   // category whose subcategories are expanded
+  const [newSub, setNewSub]         = useState('');
+  const [subEditId, setSubEditId]   = useState(null);
+  const [subEditName, setSubEditName] = useState('');
+  const [subErr, setSubErr]         = useState('');
+  const [subBusy, setSubBusy]       = useState(false);
+
+  const fetchSubcats = useCallback(async () => {
+    try { const res = await getSubcategories(); setSubcats(res.data.subcategories || []); }
+    catch { /* silent */ }
+  }, []);
+  useEffect(() => { fetchSubcats(); }, [fetchSubcats]);
+
+  const subsOf = (catId) => subcats.filter(s => s.category_id === catId);
+  const toggleSubs = (catId) => {
+    setOpenCatId(id => (id === catId ? null : catId));
+    setNewSub(''); setSubErr(''); setSubEditId(null);
+  };
+  const runSub = async (fn) => {
+    setSubBusy(true); setSubErr('');
+    try { await fn(); await fetchSubcats(); return true; }
+    catch (err) { setSubErr(err.response?.data?.detail || 'Failed — please try again.'); return false; }
+    finally { setSubBusy(false); }
+  };
+  const addSub = async (catId) => {
+    if (!newSub.trim()) return;
+    if (await runSub(() => createSubcategory({ category_id: catId, name: newSub.trim() }))) setNewSub('');
+  };
+  const saveSubName = async (s) => {
+    if (!subEditName.trim()) return;
+    if (await runSub(() => updateSubcategory(s.id, { name: subEditName.trim() }))) setSubEditId(null);
+  };
+  const toggleSubActive = (s) => runSub(() => updateSubcategory(s.id, { active: !s.active }));
+  const removeSub = (s) => {
+    if (!confirm(`Delete subcategory "${s.name}"?`)) return;
+    runSub(() => deleteSubcategory(s.id));
+  };
 
   const openAdd  = () => { setForm(EMPTY_FORM); setFormError(''); setModal('add'); };
   const openEdit = (cat) => { setSelected(cat); setForm({ name: cat.name || '', description: cat.description || '', active: cat.active !== undefined ? cat.active : true }); setFormError(''); setModal('edit'); };
@@ -166,18 +209,30 @@ export default function Categories() {
                     <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-widest" style={{ color: B.goldLight }}>#</th>
                     <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-widest" style={{ color: B.goldLight }}>Name</th>
                     <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-widest" style={{ color: B.goldLight }}>Description</th>
+                    <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-widest" style={{ color: B.goldLight }}>Subcategories</th>
                     <th className="px-5 py-3 text-center text-xs font-bold uppercase tracking-widest" style={{ color: B.goldLight }}>Active</th>
                     <th className="px-5 py-3 text-center text-xs font-bold uppercase tracking-widest" style={{ color: B.goldLight }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {categories.map((cat, idx) => (
-                    <tr key={cat.id}
+                  {categories.map((cat, idx) => {
+                    const subs = subsOf(cat.id);
+                    const open = openCatId === cat.id;
+                    return (
+                    <Fragment key={cat.id}>
+                    <tr
                       className="transition-colors"
-                      style={{ background: idx % 2 === 0 ? '#fff9ee' : '#fffef8', borderTop: '1px solid #e8d5a3' }}>
+                      style={{ background: open ? '#fff3d6' : idx % 2 === 0 ? '#fff9ee' : '#fffef8', borderTop: '1px solid #e8d5a3' }}>
                       <td className="px-5 py-3 text-sm" style={{ color: B.textLight }}>{idx + 1}</td>
                       <td className="px-5 py-3 text-sm font-bold" style={{ color: B.text }}>{cat.name}</td>
                       <td className="px-5 py-3 text-sm" style={{ color: B.textLight }}>{cat.description || '—'}</td>
+                      <td className="px-5 py-3 text-sm">
+                        <button onClick={() => toggleSubs(cat.id)}
+                          className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95 transition-all whitespace-nowrap"
+                          style={open ? { background: B.goldGrad, color: B.brown } : { background: '#fff9ee', border: B.goldBorder, color: B.text }}>
+                          {subs.length} {open ? '▲' : '▼ Manage'}
+                        </button>
+                      </td>
                       <td className="px-5 py-3 text-center">
                         {cat.active
                           ? <span className="px-2.5 py-0.5 rounded-full text-xs font-bold" style={{ background: '#e8f5e9', color: '#2e7d32' }}>Active</span>
@@ -196,7 +251,71 @@ export default function Categories() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    {open && (
+                      <tr style={{ background: '#fffdf5', borderTop: '1px dashed #e8d5a3' }}>
+                        <td />
+                        <td colSpan={5} className="px-5 py-4">
+                          <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: B.textLight }}>
+                            Subcategories of {cat.name}
+                            <span className="ml-1 font-normal normal-case">(used by products and raw materials)</span>
+                          </p>
+                          {subErr && <p className="text-xs font-semibold mb-2" style={{ color: '#c62828' }}>{subErr}</p>}
+                          <div className="space-y-1.5 mb-3">
+                            {subs.length === 0 && <p className="text-sm" style={{ color: B.textLight }}>No subcategories yet.</p>}
+                            {subs.map(s => (
+                              <div key={s.id} className="flex items-center gap-2 flex-wrap rounded-lg px-3 py-1.5"
+                                style={{ background: '#fff', border: '1px solid #f0e0c0', opacity: s.active ? 1 : 0.55 }}>
+                                {subEditId === s.id ? (
+                                  <input value={subEditName} onChange={e => setSubEditName(e.target.value)} autoFocus
+                                    onKeyDown={e => { if (e.key === 'Enter') saveSubName(s); if (e.key === 'Escape') setSubEditId(null); }}
+                                    style={{ ...inputCls, padding: '4px 10px', width: 200 }} maxLength={100} />
+                                ) : (
+                                  <span className="text-sm font-semibold" style={{ color: B.text }}>{s.name}</span>
+                                )}
+                                <span className="text-xs" style={{ color: B.textLight }}>
+                                  {s.product_count} product{s.product_count !== 1 ? 's' : ''} · {s.raw_material_count} raw material{s.raw_material_count !== 1 ? 's' : ''}
+                                  {!s.active && ' · inactive'}
+                                </span>
+                                <div className="ml-auto flex gap-1.5">
+                                  {subEditId === s.id ? (
+                                    <>
+                                      <button onClick={() => saveSubName(s)} disabled={subBusy} className="text-xs font-bold px-2 py-1 rounded-lg"
+                                        style={{ background: '#e8f5e9', color: '#2e7d32' }}>Save</button>
+                                      <button onClick={() => setSubEditId(null)} className="text-xs font-bold px-2 py-1 rounded-lg"
+                                        style={{ background: '#f5f5f5', color: '#555' }}>Cancel</button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button onClick={() => { setSubEditId(s.id); setSubEditName(s.name); }} className="text-xs font-bold px-2 py-1 rounded-lg"
+                                        style={{ background: '#fff9ee', border: B.goldBorder, color: B.text }}>Rename</button>
+                                      <button onClick={() => toggleSubActive(s)} disabled={subBusy} className="text-xs font-bold px-2 py-1 rounded-lg"
+                                        style={{ background: s.active ? '#fff7e0' : '#e8f5e9', color: s.active ? '#b45309' : '#2e7d32' }}>
+                                        {s.active ? 'Deactivate' : 'Activate'}
+                                      </button>
+                                      <button onClick={() => removeSub(s)} disabled={subBusy} className="text-xs font-bold px-2 py-1 rounded-lg"
+                                        style={{ background: '#fff0f0', border: '1px solid #e57373', color: '#c62828' }}>Delete</button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input value={newSub} onChange={e => setNewSub(e.target.value)} maxLength={100}
+                              onKeyDown={e => { if (e.key === 'Enter') addSub(cat.id); }}
+                              placeholder={`New subcategory in ${cat.name} (e.g. Dairy, Spices)`} style={{ ...inputCls, maxWidth: 360 }} />
+                            <button onClick={() => addSub(cat.id)} disabled={subBusy || !newSub.trim()}
+                              className="font-bold px-4 rounded-xl text-sm active:scale-95 disabled:opacity-50"
+                              style={{ background: B.goldGrad, color: B.brown }}>
+                              + Add
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

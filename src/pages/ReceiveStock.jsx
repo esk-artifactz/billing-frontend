@@ -45,6 +45,9 @@ export default function ReceiveStock() {
   const [payType,      setPayType]      = useState('later'); // 'full' | 'partial' | 'later'
   const [payAmount,    setPayAmount]    = useState('');
   const [payMode,      setPayMode]      = useState('cash');
+  // Delivery date — supplier bill, payment and its Daily Expense are dated on it (defaults to the PO date)
+  const istToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const [recvDate,     setRecvDate]     = useState(istToday());
   const [saving,       setSaving]       = useState(false);
   const [saveError,    setSaveError]    = useState('');
 
@@ -74,6 +77,7 @@ export default function ReceiveStock() {
       const res = await getPurchaseOrder(id);
       const po  = res.data.purchase_order;
       setSelectedPO(po);
+      setRecvDate(po.po_date ? String(po.po_date).slice(0, 10) : istToday());
       // Pre-fill remaining qty for each item
       const init = {};
       po.items.forEach(item => {
@@ -114,6 +118,7 @@ export default function ReceiveStock() {
     try {
       const res = await receivePurchaseOrder(selectedPO.id, {
         items, notes: recvNotes || null,
+        receive_date: recvDate || undefined,
         supplier_invoice_no: invoiceNo.trim() || undefined,
         bill_amount: billAmount,
         payment: paidNow > 0 ? { amount: paidNow, payment_mode: payMode } : undefined,
@@ -248,7 +253,7 @@ export default function ReceiveStock() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: `linear-gradient(90deg, ${B.darkBrown}, ${B.midBrown})` }}>
-                    {['PO Number', 'Brand', 'Supplier', 'Items', 'Status', 'Created', 'Actions'].map(h => (
+                    {['PO Number', 'Brand', 'Supplier', 'Items', 'Status', 'PO Date', 'Actions'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
                         style={{ color: B.goldLight }}>{h}</th>
                     ))}
@@ -278,7 +283,9 @@ export default function ReceiveStock() {
                         </td>
                         <td className="px-4 py-3">{statusBadge(po.status)}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: '#7a4e08' }}>
-                          {po.created_at ? new Date(po.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—'}
+                          {po.po_date
+                            ? new Date(`${String(po.po_date).slice(0, 10)}T00:00:00`).toLocaleDateString('en-IN')
+                            : po.created_at ? new Date(po.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—'}
                           <div className="text-gray-400">{po.created_by}</div>
                         </td>
                         <td className="px-4 py-3">
@@ -340,6 +347,7 @@ export default function ReceiveStock() {
                       <div className="flex flex-wrap gap-2 mt-1 text-xs" style={{ color: '#a07020' }}>
                         {selectedPO.brand && <span>Brand: <strong>{selectedPO.brand}</strong></span>}
                         {selectedPO.supplier_name && <span>· Supplier: <strong>{selectedPO.supplier_name}</strong></span>}
+                        {selectedPO.po_date && <span>· PO Date: <strong>{String(selectedPO.po_date).slice(0, 10)}</strong></span>}
                         <span>· {statusBadge(selectedPO.status)}</span>
                       </div>
                       {selectedPO.notes && (
@@ -420,6 +428,19 @@ export default function ReceiveStock() {
                       </div>
                     )}
                     {/* Supplier bill + payment (supplier ledger) */}
+                    {/* Date of this delivery — used for the bill, payment and Daily Expense */}
+                    <div className="flex items-end gap-3 flex-wrap">
+                      <div>
+                        <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>Received On</label>
+                        <input type="date" value={recvDate}
+                          min={selectedPO.po_date ? String(selectedPO.po_date).slice(0, 10) : undefined} max={istToday()}
+                          onChange={e => setRecvDate(e.target.value)}
+                          className="border-2 rounded-lg px-2 py-1.5 text-sm outline-none" style={{ borderColor: '#e8d5a3' }} />
+                      </div>
+                      <p className="text-xs pb-2" style={{ color: '#a07020' }}>
+                        Supplier bill{paidNow > 0 ? ' and the payment (Daily Expense)' : ''} will be dated <strong>{recvDate}</strong>
+                      </p>
+                    </div>
                     <div className="rounded-xl p-3 space-y-2" style={{ background: '#fffbf2', border: '1px solid #e8d5a3' }}>
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-bold uppercase tracking-wider" style={{ color: B.brown }}>Supplier Bill</p>
