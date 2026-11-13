@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+
 const B = {
   brown:      '#3d2008',
   gold:       '#d4a017',
@@ -37,10 +39,28 @@ function ReceiptModal({ title, onClose, children, wide }) {
  * Prints only the #receipt-print region (see print styles in the page using it,
  * or the global styles in App.css).
  */
-export default function Receipt({ sale, items, onClose }) {
+export default function Receipt({ sale, items, onClose, quickKeys = false }) {
   const handlePrint = () => {
     setTimeout(() => window.print(), 50);
   };
+
+  // Billing screen (quickKeys): Enter = close for next customer, P = print,
+  // optional auto-print of every bill (for when a receipt printer is connected)
+  const [autoPrint, setAutoPrint] = useState(() => localStorage.getItem('billingAutoPrint') === '1');
+  useEffect(() => {
+    if (quickKeys && autoPrint) handlePrint();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!quickKeys) return;
+    const onKey = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); onClose(); }
+      else if (e.key.toLowerCase() === 'p' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); handlePrint(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [quickKeys, onClose]);
+  const toggleAutoPrint = (v) => { setAutoPrint(v); localStorage.setItem('billingAutoPrint', v ? '1' : '0'); };
 
   return (
     <ReceiptModal title="Receipt" onClose={onClose}>
@@ -142,14 +162,20 @@ export default function Receipt({ sale, items, onClose }) {
         <button onClick={handlePrint}
           className="flex-1 font-semibold py-2.5 rounded-xl text-sm transition-all active:scale-95"
           style={{ background: B.goldGrad, color: B.brown }}>
-          Print Receipt
+          Print Receipt{quickKeys && <span className="text-xs font-normal opacity-70"> (P)</span>}
         </button>
         <button onClick={onClose}
           className="flex-1 font-semibold py-2.5 rounded-xl text-sm border transition-colors"
           style={{ borderColor: B.gold, color: B.text, background: 'white' }}>
-          Close
+          {quickKeys ? <>Next Bill <span className="text-xs font-normal opacity-70">(Enter)</span></> : 'Close'}
         </button>
       </div>
+      {quickKeys && (
+        <label className="mt-3 flex items-center gap-2 text-xs cursor-pointer print:hidden" style={{ color: B.textLight }}>
+          <input type="checkbox" checked={autoPrint} onChange={e => toggleAutoPrint(e.target.checked)} />
+          Auto-print every bill (turn on when the receipt printer is connected)
+        </label>
+      )}
       {/* Print styles — only the receipt content prints, everything else hidden */}
       <style>{`
         @media print {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   getRawMaterialStock, getRawMaterialPurchases, createRawMaterialPurchase,
@@ -51,6 +51,18 @@ export default function RawMaterialStock() {
   const [linkIds, setLinkIds]   = useState([]);
   const [notes, setNotes]       = useState('');
   const [lines, setLines]       = useState([{ ...EMPTY_LINE }]);
+
+  // Coming from the Purchase List ("Record Purchase →"): fill supplier + items once
+  const location = useLocation();
+  useEffect(() => {
+    const pre = location.state?.prefill;
+    if (!pre) return;
+    setTab('purchase');
+    setSupplierId(pre.supplier_id || '');
+    if (pre.lines?.length) setLines(pre.lines.map(l => ({ ...EMPTY_LINE, ...l })));
+    window.history.replaceState({}, '');   // don't refill on page refresh
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [saving, setSaving]     = useState(false);
   const [formErr, setFormErr]   = useState('');
 
@@ -259,6 +271,11 @@ export default function RawMaterialStock() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm hidden sm:inline" style={{ color: '#c8a84b' }}>{user?.full_name}</span>
+          <button onClick={() => navigate('/raw-material-purchase-list')}
+            className="text-sm font-semibold px-3 py-1.5 rounded-lg"
+            style={{ background: 'rgba(255,255,255,0.12)', color: '#fff' }}>
+            Purchase List{stock?.low_count ? ` (${stock.low_count})` : ''}
+          </button>
           <button onClick={() => navigate('/raw-materials')}
             className="text-sm font-semibold px-3 py-1.5 rounded-lg"
             style={{ background: 'rgba(255,255,255,0.12)', color: '#fff' }}>Materials &amp; Usage</button>

@@ -38,8 +38,8 @@ const BONUS_TYPES = ['Attendance', 'Festival', 'Performance', 'Other'];
 const EMPTY_DESIG = { name: '', daily_rate: '', ot_rate: '', description: '' };
 
 function currentMonth() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  // Current month in IST (independent of the device's timezone setting)
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7);
 }
 function monthLabel(ym) {
   const [y, m] = ym.split('-');

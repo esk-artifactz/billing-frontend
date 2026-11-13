@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getSalesHistory, getReceipt, updateSale } from '../api/client';
+import { getSalesHistory, getReceipt, updateSale, getProducts } from '../api/client';
 import Receipt from '../components/Receipt';
 
 const B = {
@@ -46,7 +46,14 @@ export default function SalesHistory() {
   const [editErr,   setEditErr]   = useState('');
   useEscClose(() => setEditSale(null), !!editSale);
 
-  const openEdit = (s) => {
+  // Bill items being edited: { product_id, name, quantity, unit_price, gst }
+  const [editItems, setEditItems]       = useState([]);
+  const [itemsLoaded, setItemsLoaded]   = useState(false);
+  const [itemsChanged, setItemsChanged] = useState(false);
+  const [allProducts, setAllProducts]   = useState([]);
+  const [addPid, setAddPid]             = useState('');
+
+  const openEdit = async (s) => {
     let splits = {};
     try { splits = typeof s.payment_splits === 'string' ? JSON.parse(s.payment_splits) : (s.payment_splits || {}); } catch { splits = {}; }
     setEditForm({
@@ -56,20 +63,76 @@ export default function SalesHistory() {
       customer_mobile: s.customer_mobile || '',
       discount_total:  s.discount_total ?? '',
       parcel_charge:   s.parcel_charge ?? '',
+      other_charge:    parseFloat(s.other_charge) > 0 ? String(parseFloat(s.other_charge)) : '',
+      other_description: s.other_description || '',
       split_cash: splits.cash ?? '',
       split_upi:  splits.upi  ?? '',
       split_card: splits.card ?? '',
     });
     setEditErr('');
+    setEditItems([]); setItemsLoaded(false); setItemsChanged(false); setAddPid('');
     setEditSale(s);
+    try {
+      const [rec, prods] = await Promise.all([
+        getReceipt(s.invoice_number),
+        allProducts.length ? Promise.resolve(null) : getProducts(),
+      ]);
+      const plist = prods ? (prods.data.products || []) : allProducts;
+      if (prods) setAllProducts(plist);
+      setEditItems((rec.data.items || []).map(it => {
+        const p = plist.find(x => x.id === it.product_id);
+        return {
+          product_id: it.product_id, name: it.product_name,
+          quantity: String(parseFloat(it.quantity)), unit_price: String(parseFloat(it.unit_price)),
+          gst: parseFloat(p?.gst_percentage || 0),
+        };
+      }));
+      setItemsLoaded(true);
+    } catch {
+      setEditErr('Could not load the bill items — you can still edit payment details.');
+    }
+  };
+
+  // Totals from the (edited) items — GST per line rounded like the backend
+  const editTotals = () => {
+    const subtotal = itemsLoaded
+      ? editItems.reduce((s, i) => s + (parseFloat(i.unit_price) || 0) * (parseFloat(i.quantity) || 0), 0)
+      : parseFloat(editSale.subtotal || 0);
+    const tax = itemsLoaded
+      ? editItems.reduce((s, i) => s + Math.round((parseFloat(i.unit_price) || 0) * (parseFloat(i.quantity) || 0) * i.gst) / 100, 0)
+      : parseFloat(editSale.tax_total || 0);
+    const discount = parseFloat(editForm.discount_total) || 0;
+    const parcel   = parseFloat(editForm.parcel_charge)  || 0;
+    const other    = parseFloat(editForm.other_charge)   || 0;
+    const newTotal = Math.round(Math.round((subtotal - discount + tax + parcel + other) * 100) / 100);
+    return { subtotal, tax, discount, parcel, other, newTotal };
+  };
+
+  const setItem = (idx, field, val) => {
+    setEditItems(list => list.map((it, i) => (i === idx ? { ...it, [field]: val } : it)));
+    setItemsChanged(true);
+  };
+  const removeItem = (idx) => { setEditItems(list => list.filter((_, i) => i !== idx)); setItemsChanged(true); };
+  const addItem = () => {
+    const p = allProducts.find(x => String(x.id) === String(addPid));
+    if (!p) return;
+    setEditItems(list => {
+      const ex = list.findIndex(i => i.product_id === p.id);
+      if (ex >= 0) return list.map((it, i) => (i === ex ? { ...it, quantity: String((parseFloat(it.quantity) || 0) + 1) } : it));
+      return [...list, { product_id: p.id, name: p.name, quantity: '1', unit_price: String(parseFloat(p.selling_price)),
+                         gst: parseFloat(p.gst_percentage || 0) }];
+    });
+    setItemsChanged(true); setAddPid('');
   };
 
   const saveEdit = async () => {
-    const discount = parseFloat(editForm.discount_total) || 0;
-    const parcel   = parseFloat(editForm.parcel_charge)  || 0;
-    const subtotal = parseFloat(editSale.subtotal || 0);
-    const tax      = parseFloat(editSale.tax_total || 0);
-    const newTotal = Math.round(subtotal - discount + tax + parcel + (parseFloat(editSale.other_charge) || 0));
+    const { discount, parcel, other, newTotal } = editTotals();
+    if (itemsChanged) {
+      if (editItems.some(i => !(parseFloat(i.quantity) > 0) || isNaN(parseFloat(i.unit_price)) || parseFloat(i.unit_price) < 0)) {
+        setEditErr('Every item needs a quantity above 0 and a valid price (use ✕ to remove an item).'); return;
+      }
+      if (!editItems.length && other <= 0) { setEditErr('A bill needs at least one item or an Other Things amount.'); return; }
+    }
     const payload  = {
       payment_method:  editForm.payment_method,
       amount_tendered: editForm.amount_tendered === '' ? null : parseFloat(editForm.amount_tendered),
@@ -77,7 +140,18 @@ export default function SalesHistory() {
       customer_mobile: editForm.customer_mobile.trim() || null,
       discount_total:  discount,
       parcel_charge:   parcel,
+      other_charge:    other,
+      other_description: editForm.other_description.trim() || null,
     };
+    if (itemsChanged) {
+      payload.items = editItems.map(i => ({
+        product_id: i.product_id, quantity: parseFloat(i.quantity), unit_price: parseFloat(i.unit_price),
+      }));
+    }
+    if (editForm.payment_method === 'cash' && payload.amount_tendered != null && payload.amount_tendered < newTotal) {
+      setEditErr(`Amount tendered (${fmtINR(payload.amount_tendered)}) is less than the new bill total (${fmtINR(newTotal)}).`);
+      return;
+    }
     if (editForm.payment_method === 'split') {
       const sp = {};
       if (parseFloat(editForm.split_cash) > 0) sp.cash = parseFloat(editForm.split_cash);
@@ -354,11 +428,7 @@ export default function SalesHistory() {
           background: '#fff9ee', border: `1.5px solid ${B.gold}`, color: B.brown,
           borderRadius: 10, padding: '8px 12px', width: '100%', fontSize: 13, outline: 'none',
         };
-        const discount = parseFloat(editForm.discount_total) || 0;
-        const parcel   = parseFloat(editForm.parcel_charge)  || 0;
-        const subtotal = parseFloat(editSale.subtotal || 0);
-        const tax      = parseFloat(editSale.tax_total || 0);
-        const newTotal = Math.round(subtotal - discount + tax + parcel + (parseFloat(editSale.other_charge) || 0));
+        const { subtotal, tax, newTotal } = editTotals();
         const spSum    = (parseFloat(editForm.split_cash) || 0) +
                          (parseFloat(editForm.split_upi)  || 0) +
                          (parseFloat(editForm.split_card) || 0);
@@ -372,7 +442,7 @@ export default function SalesHistory() {
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
             style={{ background: 'rgba(45,26,14,0.6)' }}
             onClick={ev => { if (ev.target === ev.currentTarget) setEditSale(null); }}>
-            <div className="w-full max-w-md rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
+            <div className="w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
               style={{ background: '#fff', border: `2px solid ${B.gold}` }}>
               <div className="h-1 flex-shrink-0" style={{ background: `linear-gradient(90deg,#b8860b,${B.goldLight},#b8860b)` }} />
               <div className="p-5 overflow-y-auto space-y-3">
@@ -382,6 +452,80 @@ export default function SalesHistory() {
                     <p className="text-xs font-mono" style={{ color: B.textLight }}>{editSale.invoice_number}</p>
                   </div>
                   <button onClick={() => setEditSale(null)} className="text-2xl font-bold leading-none" style={{ color: B.textLight }}>×</button>
+                </div>
+
+                {/* Items — quantity / price / remove / add (stock is adjusted on save) */}
+                <div className="rounded-xl overflow-hidden" style={{ border: `1.5px solid ${B.gold}` }}>
+                  <div className="px-3 py-2 flex items-center justify-between" style={{ background: '#fff9ee' }}>
+                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: B.textLight }}>Items</span>
+                    {itemsChanged && <span className="text-xs font-bold" style={{ color: '#b45309' }}>Changed — stock will be adjusted</span>}
+                  </div>
+                  {!itemsLoaded ? (
+                    <p className="px-3 py-3 text-xs" style={{ color: B.textLight }}>Loading items…</p>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr style={{ background: '#fffdf5' }}>
+                          {['Item', 'Qty', 'Price ₹', 'Amount', ''].map(h => (
+                            <th key={h} className="px-2 py-1.5 text-left text-xs font-bold" style={{ color: B.textLight }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {editItems.length === 0 && (
+                          <tr><td colSpan={5} className="px-3 py-2 text-xs" style={{ color: B.textLight }}>No items</td></tr>
+                        )}
+                        {editItems.map((it, idx) => (
+                          <tr key={`${it.product_id}-${idx}`} style={{ borderTop: '1px solid #f0e0c0' }}>
+                            <td className="px-2 py-1.5 text-xs font-semibold" style={{ color: B.darkBrown }}>{it.name}</td>
+                            <td className="px-2 py-1.5">
+                              <input type="number" min="0" step="any" value={it.quantity}
+                                onChange={e => setItem(idx, 'quantity', e.target.value)}
+                                style={{ ...inputStyle, padding: '4px 6px', width: 64, fontSize: 12 }} />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input type="number" min="0" step="0.01" value={it.unit_price}
+                                onChange={e => setItem(idx, 'unit_price', e.target.value)}
+                                style={{ ...inputStyle, padding: '4px 6px', width: 80, fontSize: 12 }} />
+                            </td>
+                            <td className="px-2 py-1.5 text-xs font-bold whitespace-nowrap" style={{ color: B.brown }}>
+                              {fmtINR((parseFloat(it.unit_price) || 0) * (parseFloat(it.quantity) || 0))}
+                              {it.gst > 0 && <span className="block font-normal" style={{ color: B.textLight }}>+{it.gst}% GST</span>}
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <button type="button" onClick={() => removeItem(idx)} title="Remove item"
+                                className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: '#fee2e2', color: '#dc2626' }}>✕</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {itemsLoaded && (
+                    <div className="px-3 py-2 flex gap-2" style={{ borderTop: '1px solid #f0e0c0', background: '#fffdf5' }}>
+                      <select value={addPid} onChange={e => setAddPid(e.target.value)}
+                        style={{ ...inputStyle, padding: '5px 8px', fontSize: 12 }}>
+                        <option value="">+ Add item…</option>
+                        {allProducts.filter(p => p.active).map(p => (
+                          <option key={p.id} value={p.id}>{p.name}{p.barcode ? ` (${p.barcode})` : ''} — ₹{parseFloat(p.selling_price).toFixed(2)}</option>
+                        ))}
+                      </select>
+                      <button type="button" onClick={addItem} disabled={!addPid}
+                        className="text-xs font-bold px-3 rounded-lg disabled:opacity-50 flex-shrink-0"
+                        style={{ background: `linear-gradient(135deg,#b8860b,${B.goldLight})`, color: B.darkBrown }}>Add</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Other Things */}
+                <div>
+                  <label className="block text-xs font-bold mb-1" style={{ color: B.text }}>Other Things (₹)</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="text" value={editForm.other_description} maxLength={200} placeholder="Details (optional)"
+                      onChange={e => setEditForm(f => ({ ...f, other_description: e.target.value }))} style={inputStyle} />
+                    <input type="number" min="0" step="0.01" value={editForm.other_charge} placeholder="0.00"
+                      onChange={e => setEditForm(f => ({ ...f, other_charge: e.target.value }))} style={inputStyle} />
+                  </div>
                 </div>
 
                 {/* Payment method */}
@@ -469,7 +613,10 @@ export default function SalesHistory() {
                 <div className="rounded-xl px-3 py-2.5 flex justify-between items-center"
                   style={{ background: '#fff9ee', border: `1.5px solid ${B.gold}` }}>
                   <span className="text-xs font-bold" style={{ color: B.textLight }}>
-                    New Bill Total {`(Subtotal ${fmtINR(subtotal)} − Discount + GST ${fmtINR(tax)} + Parcel${parseFloat(editSale.other_charge) > 0 ? ` + Other Things ${fmtINR(editSale.other_charge)}` : ''})`}
+                    New Bill Total {`(Items ${fmtINR(subtotal)} − Discount + GST ${fmtINR(tax)} + Parcel + Other Things)`}
+                    {editForm.payment_method === 'cash' && parseFloat(editForm.amount_tendered) >= newTotal && (
+                      <span className="block font-normal">Change: {fmtINR(parseFloat(editForm.amount_tendered) - newTotal)}</span>
+                    )}
                   </span>
                   <span className="font-extrabold" style={{ color: B.brown }}>{fmtINR(newTotal)}</span>
                 </div>

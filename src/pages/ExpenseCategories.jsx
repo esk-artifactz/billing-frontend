@@ -261,8 +261,9 @@ export default function ExpenseCategories() {
                 { label: 'Today',      fn: () => { setDateFrom(isoToday()); setDateTo(isoToday()); } },
                 { label: 'This Month', fn: () => { setDateFrom(firstOfMonth()); setDateTo(isoToday()); } },
                 { label: 'Last 7d',    fn: () => {
-                  const d = new Date(); d.setDate(d.getDate() - 6);
-                  setDateFrom(d.toLocaleDateString('en-CA')); setDateTo(isoToday());
+                  // 6 days before today's IST date
+                  const d = new Date(Date.now() - 6 * 86400000);
+                  setDateFrom(d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })); setDateTo(isoToday());
                 }},
               ].map(q => (
                 <button key={q.label} onClick={q.fn}

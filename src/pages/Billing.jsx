@@ -157,7 +157,28 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
   };
 
   // Enter anywhere in checkout confirms the payment (buttons keep their own Enter = click)
+  // ── Keyboard shortcuts (work on full-size and laptop keyboards) ──────────
+  // Enter = confirm · F5/Alt+C cash · F6/Alt+U UPI · F7/Alt+K card · F4/Alt+S split
+  // Alt+D / D discount · Alt+P / P parcel · Alt+O / O other things
+  // (plain letters only while the cursor is in an amount box or on a button,
+  //  so they never interfere with typing a customer name)
+  const discountRef = useRef(null);
+  const parcelRef   = useRef(null);
+  const otherRef    = useRef(null);
+  const focusLater  = (ref) => setTimeout(() => { ref.current?.focus(); ref.current?.select?.(); }, 30);
   const handleKeyDown = (e) => {
+    const k = e.key.toLowerCase();
+    const plainOk = !e.ctrlKey && !e.metaKey && !e.altKey &&
+      (e.target.type === 'number' || e.target.tagName === 'BUTTON');
+    const hot = (fkey, letter) => e.key === fkey || (e.altKey && k === letter) || (plainOk && k === letter);
+    const act = (fn) => { e.preventDefault(); fn(); };
+    if (hot('F5', 'c')) return act(() => setPaymentMethod('cash'));
+    if (hot('F6', 'u')) return act(() => setPaymentMethod('upi'));
+    if (hot('F7', 'k')) return act(() => setPaymentMethod('card'));
+    if (hot('F4', 's')) return act(() => setPaymentMethod('split'));
+    if (hot('', 'd'))   return act(() => { setShowDiscount(true); focusLater(discountRef); });
+    if (hot('', 'p'))   return act(() => { setShowParcel(true);   focusLater(parcelRef); });
+    if (hot('', 'o'))   return act(() => focusLater(otherRef));
     if (e.key !== 'Enter' || e.target.tagName === 'BUTTON') return;
     e.preventDefault();
     handleCheckout();
@@ -196,38 +217,40 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
           {showDiscount || discountVal > 0 ? (
             <div className="flex-1">
               <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Discount (₹)</label>
-              <input type="number" value={discount} onChange={e => setDiscount(e.target.value)}
+              <input ref={discountRef} type="number" value={discount} onChange={e => setDiscount(e.target.value)}
                 placeholder="0.00" min="0" style={inputStyle} />
             </div>
           ) : (
-            <button type="button" onClick={() => setShowDiscount(true)}
+            <button type="button" onClick={() => { setShowDiscount(true); focusLater(discountRef); }}
               className="flex-1 text-sm font-bold px-3 py-2.5 rounded-xl transition-all active:scale-95"
               style={{ background: '#fff9ee', border: `1px dashed ${B.gold}`, color: B.goldDark }}>
-              + Discount
+              + Discount <span className="text-xs font-normal opacity-70">(D)</span>
             </button>
           )}
           {showParcel || parcelVal > 0 ? (
             <div className="flex-1">
               <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Parcel Charge (₹)</label>
-              <input type="number" value={parcel} onChange={e => setParcel(e.target.value)}
+              <input ref={parcelRef} type="number" value={parcel} onChange={e => setParcel(e.target.value)}
                 placeholder="0.00" min="0" style={inputStyle} autoFocus />
             </div>
           ) : (
             <button type="button" onClick={() => setShowParcel(true)}
               className="flex-1 text-sm font-bold px-3 py-2.5 rounded-xl transition-all active:scale-95"
               style={{ background: '#fff9ee', border: `1px dashed #f59e0b`, color: '#b45309' }}>
-              + Parcel
+              + Parcel <span className="text-xs font-normal opacity-70">(P)</span>
             </button>
           )}
         </div>
 
         {/* Other Things — items not in the product list, added as one amount */}
         <div>
-          <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Other Things (₹)</label>
+          <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>
+            Other Things (₹) <span className="font-normal opacity-70">(O)</span>
+          </label>
           <div className="grid grid-cols-2 gap-2">
             <input type="text" value={otherDesc} onChange={e => setOtherDesc(e.target.value)}
               placeholder="Details (optional)" maxLength={200} style={inputStyle} />
-            <input type="number" value={otherAmount} onChange={e => setOtherAmount(e.target.value)}
+            <input ref={otherRef} type="number" value={otherAmount} onChange={e => setOtherAmount(e.target.value)}
               placeholder="0.00" min="0" step="0.01" style={inputStyle} />
           </div>
         </div>
@@ -243,6 +266,9 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
                   ? { background: B.goldGrad, color: B.brown, border: `2px solid ${B.goldDark}` }
                   : { background: '#fff9ee', color: B.text, border: `2px solid ${B.gold}` }}>
                 {m === 'upi' ? 'UPI' : m.charAt(0).toUpperCase() + m.slice(1)}
+                <span className="block text-[10px] font-normal opacity-70">
+                  {{ cash: 'F5 / C', upi: 'F6 / U', card: 'F7 / K', split: 'F4 / S' }[m]}
+                </span>
               </button>
             ))}
           </div>
@@ -453,7 +479,7 @@ function HeldBillsModal({ onClose, onRetrieve }) {
 
 // ─── Cart Panel ───────────────────────────────────────────────────────────────
 
-function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onCheckout, onHold, onShowHeld, subtotal, gstTotal, grandTotal }) {
+function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onCheckout, onHold, onShowHeld, subtotal, gstTotal, grandTotal, lastId }) {
   return (
     <div className="flex flex-col flex-1 min-h-0 h-full" style={{ background: B.cream }}>
       {/* Header */}
@@ -474,7 +500,9 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
         {cart.length === 0 ? (
           <div className="text-center py-10 text-sm" style={{ color: B.textLight }}>Cart is empty</div>
         ) : cart.map(item => (
-          <div key={item.id} className="rounded-xl p-3" style={{ background: '#fff9ee', border: B.goldBorder }}>
+          <div key={item.id} className="rounded-xl p-3"
+            title={item.id === lastId ? 'Last item — + / − / Delete / *qty act on this' : undefined}
+            style={{ background: '#fff9ee', border: item.id === lastId ? `2px solid ${B.goldDark}` : B.goldBorder }}>
             <div className="flex justify-between items-start mb-2">
               <div className="flex-1 min-w-0 pr-2">
                 <p className="font-semibold text-sm truncate" style={{ color: B.text }}>{item.name}</p>
@@ -535,12 +563,12 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
             <button onClick={onCheckout}
               className="flex-[2] min-w-[150px] font-bold py-3 rounded-xl text-sm transition-all active:scale-95"
               style={{ background: B.goldGrad, color: B.brown, boxShadow: '0 3px 12px rgba(180,130,10,0.35)' }}>
-              Checkout
+              Checkout <span className="text-xs font-normal opacity-70">(Enter)</span>
             </button>
             <button onClick={onHold}
               className="flex-1 min-w-[110px] font-bold py-3 rounded-xl text-sm transition-all active:scale-95"
               style={{ background: '#fff9ee', color: B.text, border: `2px solid ${B.gold}` }}>
-              Hold Bill
+              Hold Bill <span className="text-xs font-normal opacity-70">(F8)</span>
             </button>
           </div>
         </div>
@@ -571,10 +599,12 @@ export default function Billing() {
   const [retrievedHoldName, setRetrievedHoldName] = useState('');
   const [showHoldName, setShowHoldName]     = useState(false);
   const [showScanner, setShowScanner]       = useState(false);
+  const [showHelp, setShowHelp]             = useState(false);   // keyboard shortcut list (F1 / ?)
 
   // Close any open popup/overlay on Escape
-  const anyModalOpen = showCheckout || showHeld || showMobileCart || !!receiptData || showScanner || showHoldName;
+  const anyModalOpen = showCheckout || showHeld || showMobileCart || !!receiptData || showScanner || showHoldName || showHelp;
   useEscClose(() => {
+    if (showHelp)         { setShowHelp(false);         return; }
     if (showHoldName)     { setShowHoldName(false);     return; }
     if (receiptData)      { setReceiptData(null);       return; }
     if (showCheckout)     { setShowCheckout(false);     return; }
@@ -633,7 +663,46 @@ export default function Billing() {
     clearTimeout(scanMsgTimer.current);
     scanMsgTimer.current = setTimeout(() => setScanMsg(null), 2500);
   };
-  const findByBarcode = (code) => products.find(p => p.barcode && p.barcode === code.trim());
+  // Barcode = shortcut code (text or numbers), matched ignoring case/spaces
+  const findByBarcode = (code) => {
+    const c = String(code || '').trim().toLowerCase();
+    return c ? products.find(p => p.active !== false && p.barcode && p.barcode.trim().toLowerCase() === c) : undefined;
+  };
+
+  // ── Fast keyboard billing ────────────────────────────────────────────────
+  const [lastAddedId, setLastAddedId] = useState(null);   // target of + / − / * / Delete
+  const [hi, setHi]                   = useState(0);      // highlighted suggestion
+  const [soundOn, setSoundOn]         = useState(() => localStorage.getItem('billingSound') !== '0');
+  const audioRef = useRef(null);
+  const beep = (ok = true) => {
+    if (!soundOn) return;
+    try {
+      const ctx = audioRef.current || (audioRef.current = new (window.AudioContext || window.webkitAudioContext)());
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.frequency.value = ok ? 880 : 220; o.type = ok ? 'sine' : 'square';
+      g.gain.value = 0.08;
+      o.connect(g); g.connect(ctx.destination);
+      o.start(); o.stop(ctx.currentTime + (ok ? 0.07 : 0.25));
+    } catch { /* no audio */ }
+  };
+  const toggleSound = () => setSoundOn(s => { localStorage.setItem('billingSound', s ? '0' : '1'); return !s; });
+
+  // "3*101" / "101*3" / "101" / exact name → { product, qty }
+  const resolveEntry = (q) => {
+    const byNameOrCode = (code) => {
+      const c = code.trim().toLowerCase();
+      if (!c) return undefined;
+      return findByBarcode(c) || products.find(p => p.active !== false && p.name.trim().toLowerCase() === c);
+    };
+    const m1 = q.match(/^\s*(\d+(?:\.\d+)?)\s*\*\s*(.+?)\s*$/);   // qty * code
+    const m2 = q.match(/^\s*(.+?)\s*\*\s*(\d+(?:\.\d+)?)\s*$/);   // code * qty
+    for (const [qty, code] of [m1 && [m1[1], m1[2]], m2 && [m2[2], m2[1]]].filter(Boolean)) {
+      const p = byNameOrCode(code);
+      if (p && parseFloat(qty) > 0) return { product: p, qty: parseFloat(qty) };
+    }
+    const p = byNameOrCode(q);
+    return p ? { product: p, qty: 1 } : null;
+  };
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -648,44 +717,97 @@ export default function Billing() {
 
   useEffect(() => { fetchProducts(); fetchCategories(); }, [fetchProducts, fetchCategories]);
 
-  // Enter key: scanners append Enter after the barcode
+  const lastItem = cart.find(i => i.id === lastAddedId) || cart[cart.length - 1];
+
+  // Search box keys:
+  //   Enter      → add code / "3*code" / highlighted suggestion; empty box → checkout
+  //   ↑ ↓        → move through suggestions
+  //   + / −      → (empty box) change qty of the last item · "*5" Enter sets it to 5
+  //   Delete     → (empty box) remove last item · Shift/Ctrl+Delete → clear cart
+  //   Scanners send Enter after the barcode, so they work the same way
   const handleSearchKeyDown = (e) => {
+    const q = searchQuery.trim();
+    if (e.key === 'ArrowDown' && suggestions.length) { e.preventDefault(); setHi(h => Math.min(h + 1, suggestions.length - 1)); return; }
+    if (e.key === 'ArrowUp'   && suggestions.length) { e.preventDefault(); setHi(h => Math.max(h - 1, 0)); return; }
+    if (!q) {
+      if ((e.key === '+' || e.key === '-') && lastItem) {
+        e.preventDefault(); updateQuantity(lastItem.id, e.key === '+' ? 1 : -1); beep(); return;
+      }
+      if (e.key === 'Delete' && cart.length) {
+        e.preventDefault();
+        if (e.shiftKey || e.ctrlKey) {
+          if (window.confirm('Clear the whole cart?')) { setCart([]); setLastAddedId(null); }
+        } else if (lastItem) { removeFromCart(lastItem.id); flashScanMsg(`Removed: ${lastItem.name}`, true); }
+        return;
+      }
+      if (e.key === 'Enter') { e.preventDefault(); if (cart.length) openCheckout(); return; }
+      return;
+    }
+    if (e.key === 'Escape') { e.preventDefault(); setSearchQuery(''); return; }
     if (e.key !== 'Enter') return;
-    const code = searchQuery.trim();
-    if (!code) return;
-    const match = findByBarcode(code);
-    if (match) {
-      addToCart(match);
+    e.preventDefault();
+    // "*5" → set the last item's quantity
+    if (q.startsWith('*')) {
+      const n = parseFloat(q.slice(1));
+      if (lastItem && n > 0) { setQuantity(lastItem.id, n); flashScanMsg(`${lastItem.name} × ${n}`, true); beep(); }
+      else { flashScanMsg('Add an item first, then *qty', false); beep(false); }
       setSearchQuery('');
-      if (inputMode === 'scan') flashScanMsg(`Added: ${match.name}`, true);
-    } else if (inputMode === 'scan') {
-      flashScanMsg(`No product for barcode ${code}`, false);
+      return;
+    }
+    const hit = resolveEntry(q) ||
+      (inputMode === 'text' && !q.includes('*') && suggestions[hi] ? { product: suggestions[hi], qty: 1 } : null);
+    if (hit) {
+      addToCart(hit.product, hit.qty);
+      flashScanMsg(`Added: ${hit.product.name}${hit.qty !== 1 ? ` × ${hit.qty}` : ''}`, true);
+      beep();
       setSearchQuery('');
+    } else {
+      flashScanMsg(`No product for "${q}"`, false);
+      beep(false);
+      if (inputMode === 'scan') setSearchQuery('');
     }
   };
 
   const handleSearchChange = (q) => {
     setSearchQuery(q);
+    setHi(0);
     // Scan mode: exact barcode match → add instantly (for scanners that don't send Enter)
     if (inputMode !== 'scan') return;
     const match = findByBarcode(q);
-    if (match) { addToCart(match); setSearchQuery(''); flashScanMsg(`Added: ${match.name}`, true); }
+    if (match) { addToCart(match); setSearchQuery(''); flashScanMsg(`Added: ${match.name}`, true); beep(); }
   };
 
+  const searchLower = searchQuery.trim().toLowerCase();
   const filteredProducts = products.filter(p => {
     const matchCat    = !selectedCategory || p.category_id === selectedCategory;
-    const matchSearch = inputMode === 'scan' || !searchQuery ||
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.barcode && p.barcode.includes(searchQuery));
+    const matchSearch = inputMode === 'scan' || !searchLower || searchLower.includes('*') ||
+      p.name.toLowerCase().includes(searchLower) ||
+      (p.barcode && p.barcode.toLowerCase().includes(searchLower));
     return matchCat && matchSearch && p.active;
   });
+  // Dropdown suggestions while typing (Type mode) — ↑ ↓ to pick, Enter to add
+  const suggestions = inputMode === 'text' && searchLower && !searchLower.includes('*') && !searchLower.startsWith('*')
+    ? products.filter(p => p.active && (p.name.toLowerCase().includes(searchLower) ||
+        (p.barcode && p.barcode.toLowerCase().startsWith(searchLower))))
+        .sort((a, b) => {
+          // exact / prefix code matches first, then name prefix
+          const rank = (p) => (p.barcode?.toLowerCase() === searchLower ? 0
+            : p.barcode?.toLowerCase().startsWith(searchLower) ? 1
+            : p.name.toLowerCase().startsWith(searchLower) ? 2 : 3);
+          return rank(a) - rank(b) || a.name.localeCompare(b.name);
+        }).slice(0, 8)
+    : [];
 
-  const addToCart = (product) => {
+  // Quick-sale keypad: products marked "Quick sale", Alt+1 … Alt+9
+  const quickItems = products.filter(p => p.active && p.quick_sale_enabled).slice(0, 9);
+
+  const addToCart = (product, qty = 1) => {
     setCart(prev => {
       const ex = prev.find(i => i.id === product.id);
-      if (ex) return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { ...product, quantity: 1 }];
+      if (ex) return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + qty } : i);
+      return [...prev, { ...product, quantity: qty }];
     });
+    setLastAddedId(product.id);
   };
 
   const updateQuantity = (productId, delta) => {
@@ -707,7 +829,7 @@ export default function Billing() {
 
   // Camera scan result → add matching product, return status message for the modal
   const handleScanResult = (code) => {
-    const match = products.find(p => p.barcode && p.barcode === code);
+    const match = findByBarcode(code);
     if (!match) return `No product for barcode ${code}`;
     addToCart(match);
     return `Added: ${match.name}`;
@@ -757,8 +879,53 @@ export default function Billing() {
     setShowHeld(false); setShowMobileCart(false);
   };
 
+  const openCheckout = () => { setShowMobileCart(false); setShowCheckout(true); };
+
+  // Repeat last bill (Alt+R) — the cart of the last completed sale is kept on this device
+  const repeatLastBill = () => {
+    let last = [];
+    try { last = JSON.parse(localStorage.getItem('billingLastBill') || '[]'); } catch { last = []; }
+    const items = last.map(l => ({ p: products.find(p => p.id === l.id && p.active), q: l.quantity })).filter(x => x.p);
+    if (!items.length) { flashScanMsg('No previous bill to repeat', false); beep(false); return; }
+    items.forEach(x => addToCart(x.p, x.q));
+    flashScanMsg(`Repeated last bill — ${items.length} item${items.length !== 1 ? 's' : ''}`, true);
+    beep();
+  };
+
+  // Page-wide shortcuts (when no popup is open). Each F-key has an Alt+letter twin for laptops.
+  //   F1 / ?      shortcut list        F2          cursor to search box
+  //   F8 / Alt+H  hold bill            F9 / Alt+B  held bills
+  //   Alt+R       repeat last bill     Alt+1…9     quick-sale items
+  const shortcutRef = useRef(null);
+  shortcutRef.current = (e) => {
+    if (anyModalOpen) return;
+    const k = e.key.toLowerCase();
+    const inSearch = document.activeElement === searchRef.current;
+    const typingElsewhere = !inSearch && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+    const act = (fn) => { e.preventDefault(); fn(); };
+    if (e.key === 'F1' || (e.key === '?' && !typingElsewhere && !searchQuery)) return act(() => setShowHelp(true));
+    if (e.key === 'F2') return act(() => searchRef.current?.focus());
+    if (e.key === 'F8' || (e.altKey && k === 'h')) return act(() => { if (cart.length) setShowHoldName(true); });
+    if (e.key === 'F9' || (e.altKey && k === 'b')) return act(() => setShowHeld(true));
+    if (e.altKey && k === 'r') return act(repeatLastBill);
+    if (e.altKey && /^(Digit|Numpad)[1-9]$/.test(e.code)) {
+      const item = quickItems[Number(e.code.slice(-1)) - 1];
+      return act(() => {
+        if (item) { addToCart(item); flashScanMsg(`Added: ${item.name}`, true); beep(); }
+        else { flashScanMsg('No quick-sale item on that number', false); beep(false); }
+      });
+    }
+  };
+  useEffect(() => {
+    const onKey = (e) => shortcutRef.current?.(e);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const handleCheckoutSuccess = async (data) => {
-    setShowCheckout(false); setCart([]);
+    // Remember this bill for "Repeat last bill" (Alt+R)
+    localStorage.setItem('billingLastBill', JSON.stringify(cart.map(i => ({ id: i.id, quantity: i.quantity }))));
+    setShowCheckout(false); setCart([]); setLastAddedId(null);
     // Checkout succeeded — release the held bill if this cart came from one
     if (retrievedHoldRef) {
       try {
@@ -785,8 +952,8 @@ export default function Billing() {
   };
 
   const cartProps = {
-    cart, updateQuantity, setQuantity, removeFromCart,
-    onCheckout: () => { setShowMobileCart(false); setShowCheckout(true); },
+    cart, updateQuantity, setQuantity, removeFromCart, lastId: lastItem?.id,
+    onCheckout: openCheckout,
     onHold: () => { if (cart.length) { setShowMobileCart(false); setShowHoldName(true); } },
     onShowHeld: () => { setShowMobileCart(false); setShowHeld(true); },
     subtotal, gstTotal, grandTotal,
@@ -945,8 +1112,61 @@ export default function Billing() {
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            {scanMsg && (
-              <p className="text-xs font-bold mt-1.5" style={{ color: scanMsg.ok ? '#16a34a' : '#dc2626' }}>{scanMsg.text}</p>
+            {/* Suggestions while typing — ↑ ↓ to choose, Enter to add */}
+            {suggestions.length > 0 && (
+              <div className="mt-1.5 rounded-xl overflow-hidden shadow-lg" style={{ border: B.goldBorder, background: '#fff' }}>
+                {suggestions.map((p, i) => (
+                  <button key={p.id} type="button"
+                    onMouseEnter={() => setHi(i)}
+                    onClick={() => { addToCart(p); setSearchQuery(''); flashScanMsg(`Added: ${p.name}`, true); beep(); }}
+                    className="w-full flex items-center justify-between px-3 py-1.5 text-sm text-left"
+                    style={{ background: i === hi ? '#fff3d6' : '#fff', borderTop: i ? '1px solid #f0e0c0' : 'none' }}>
+                    <span className="truncate" style={{ color: B.brown }}>
+                      {p.barcode && <span className="font-mono text-xs font-bold mr-2 px-1.5 py-0.5 rounded"
+                        style={{ background: '#fdf6e3', color: B.goldDark }}>{p.barcode}</span>}
+                      <span className="font-semibold">{p.name}</span>
+                    </span>
+                    <span className="font-bold text-xs flex-shrink-0 ml-2" style={{ color: B.goldDark }}>₹{fmt(p.selling_price)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-3 mt-1.5 flex-wrap">
+              <p className="text-xs font-bold min-h-[1rem]" style={{ color: scanMsg ? (scanMsg.ok ? '#16a34a' : '#dc2626') : B.textLight }}>
+                {scanMsg ? scanMsg.text : 'Code + Enter · 3*code · Enter on empty box = checkout · F1 / ? = all shortcuts'}
+              </p>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={toggleSound} title="Beep when an item is added / not found"
+                  className="text-xs font-bold px-2 py-1 rounded-lg"
+                  style={{ background: soundOn ? '#dcfce7' : '#f3f4f6', color: soundOn ? '#16a34a' : '#6b7280' }}>
+                  Sound {soundOn ? 'On' : 'Off'}
+                </button>
+                <button type="button" onClick={() => setShowHelp(true)}
+                  className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: '#fff', border: B.goldBorder, color: B.text }}>
+                  Shortcuts (F1)
+                </button>
+                {/* Big running total so the customer can get money ready */}
+                {cart.length > 0 && (
+                  <span className="text-lg font-extrabold px-3 py-0.5 rounded-xl" style={{ background: B.bgGrad, color: B.goldLight }}>
+                    {cart.reduce((s, i) => s + i.quantity, 0)} items · ₹{Math.round(grandTotal)}
+                  </span>
+                )}
+              </div>
+            </div>
+            {/* Quick-sale keys: Alt+1 … Alt+9 */}
+            {quickItems.length > 0 && (
+              <div className="flex gap-1.5 mt-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
+                {quickItems.map((p, i) => (
+                  <button key={p.id} type="button"
+                    onClick={() => { addToCart(p); flashScanMsg(`Added: ${p.name}`, true); beep(); }}
+                    className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold active:scale-95"
+                    style={{ background: '#fff', border: B.goldBorder, color: B.brown }}
+                    title={`Alt + ${i + 1}`}>
+                    <kbd className="px-1 rounded text-[10px] font-bold" style={{ background: B.goldGrad, color: B.brown }}>Alt+{i + 1}</kbd>
+                    {p.name}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 
@@ -1053,7 +1273,67 @@ export default function Billing() {
       {showHoldName  && <HoldNameModal initialName={retrievedHoldName} isUpdate={!!retrievedHoldRef}
                           onClose={() => setShowHoldName(false)} onConfirm={handleHold} />}
       {showScanner   && <BarcodeScannerModal onScan={handleScanResult} onClose={() => setShowScanner(false)} />}
-      {receiptData   && <Receipt sale={receiptData.sale} items={receiptData.items} onClose={() => setReceiptData(null)} />}
+      {receiptData   && <Receipt sale={receiptData.sale} items={receiptData.items} onClose={() => setReceiptData(null)} quickKeys />}
+
+      {/* ── Keyboard shortcut list (F1 / ?) ── */}
+      {showHelp && (
+        <Modal title="Keyboard Shortcuts — Fast Billing" onClose={() => setShowHelp(false)} wide>
+          <div className="grid sm:grid-cols-2 gap-4 text-sm">
+            {[
+              ['Adding items', [
+                ['101  Enter', 'Add product with code / barcode 101 (text or numbers)'],
+                ['3*101  or  101*3', 'Add 3 of that product'],
+                ['tea  ↑ ↓  Enter', 'Search by name, pick from the list'],
+                ['Scan barcode', 'Adds the product'],
+                ['Alt + 1 … 9', 'Quick-sale items (marked "Quick sale" on the product)'],
+                ['Alt + R', 'Repeat the last bill'],
+              ]],
+              ['Changing the cart (search box empty)', [
+                ['+  /  −', 'Quantity of the last item up / down'],
+                ['*5  Enter', 'Set the last item\u2019s quantity to 5'],
+                ['Delete', 'Remove the last item'],
+                ['Shift + Delete', 'Clear the whole cart'],
+                ['Esc', 'Clear what you typed'],
+              ]],
+              ['Checkout', [
+                ['Enter (empty box)', 'Open checkout'],
+                ['Enter', 'Confirm — empty amount = exact cash'],
+                ['F5 / C · F6 / U · F7 / K · F4 / S', 'Cash · UPI · Card · Split'],
+                ['D · P · O', 'Discount · Parcel · Other Things'],
+                ['Receipt: Enter / P', 'Next bill / Print'],
+              ]],
+              ['Other', [
+                ['F8 / Alt + H', 'Hold bill'],
+                ['F9 / Alt + B', 'Held bills'],
+                ['F2', 'Cursor to the search box'],
+                ['F1 / ?', 'This list'],
+                ['Esc', 'Close any popup'],
+              ]],
+            ].map(([title, rows]) => (
+              <div key={title} className="rounded-xl p-3" style={{ background: '#fff9ee', border: B.goldBorder }}>
+                <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: B.textLight }}>{title}</p>
+                <table className="w-full">
+                  <tbody>
+                    {rows.map(([keys, what]) => (
+                      <tr key={keys} className="align-top">
+                        <td className="py-1 pr-3 whitespace-nowrap">
+                          <kbd className="px-1.5 py-0.5 rounded text-xs font-bold font-mono"
+                            style={{ background: '#fff', border: '1px solid #d4a017', color: B.brown }}>{keys}</kbd>
+                        </td>
+                        <td className="py-1 text-xs" style={{ color: B.text }}>{what}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs mt-3" style={{ color: B.textLight }}>
+            Laptops: every F-key also has the Alt / letter shortcut shown, so the Fn key is never needed.
+            Product codes are the Barcode field on each product (Manage Products).
+          </p>
+        </Modal>
+      )}
     </div>
   );
 }

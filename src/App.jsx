@@ -26,6 +26,7 @@ import SalesReturn from './pages/SalesReturn';
 import PurchaseReturn from './pages/PurchaseReturn';
 import RawMaterials from './pages/RawMaterials';
 import RawMaterialStock from './pages/RawMaterialStock';
+import RawMaterialPurchaseList from './pages/RawMaterialPurchaseList';
 
 export default function App() {
   return (
@@ -262,6 +263,16 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <RawMaterialStock />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Raw material purchase list — low-stock items to buy (Cashier & Admin) */}
+          <Route
+            path="/raw-material-purchase-list"
+            element={
+              <ProtectedRoute>
+                <RawMaterialPurchaseList />
               </ProtectedRoute>
             }
           />
