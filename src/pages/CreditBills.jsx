@@ -99,7 +99,7 @@ export default function CreditBills() {
   // ── Fetch products for new bill ─────────────────────────────────────────────
   useEffect(() => {
     if (tab !== 'new') return;
-    Promise.all([getProducts(), getCategories()])
+    Promise.all([getProducts(), getCategories('product')])
       .then(([pr, cr]) => {
         setProducts(pr.data.products || []);
         setCategories(cr.data.categories || []);

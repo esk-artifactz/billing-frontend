@@ -94,7 +94,7 @@ export default function RawMaterials() {
   const [cats, setCats]       = useState([]);
   const [subcats, setSubcats] = useState([]);
   useEffect(() => {
-    getCategories().then(r => setCats(r.data.categories || [])).catch(() => {});
+    getCategories('raw_material').then(r => setCats(r.data.categories || [])).catch(() => {});
     getSubcategories({ active: 1 }).then(r => setSubcats(r.data.subcategories || [])).catch(() => {});
   }, []);
   const [editLegacyCat, setEditLegacyCat] = useState('');   // old free-text category of the item being edited
@@ -156,15 +156,51 @@ export default function RawMaterials() {
   // When item_id changes on a row, pre-fill unit hint
   const activeItems = items.filter(it => it.active !== false);
 
+  // Category picker: shows only main Categories; selecting one lists every material
+  // in it (all its subcategories) so you just enter today's quantities and save.
+  const [consCat, setConsCat] = useState('');
+  const UNCAT = '__none__';
+  // Main category of an item (legacy items only have the "Category / Sub" text)
+  const itemCatKey = (it) => {
+    if (it.category_id) return String(it.category_id);
+    const name = (it.category || '').split(' / ')[0].trim().toLowerCase();
+    const c = name && cats.find(x => x.name.trim().toLowerCase() === name);
+    return c ? String(c.id) : UNCAT;
+  };
+  const subName = (it) => subcats.find(s => s.id === it.subcategory_id)?.name
+    || ((it.category || '').includes(' / ') ? it.category.split(' / ').slice(1).join(' / ') : '');
+  const consCategories = [
+    ...cats.map(c => ({ key: String(c.id), name: c.name, n: activeItems.filter(it => itemCatKey(it) === String(c.id)).length }))
+      .filter(c => c.n > 0)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    ...(activeItems.some(it => itemCatKey(it) === UNCAT)
+      ? [{ key: UNCAT, name: 'Uncategorised', n: activeItems.filter(it => itemCatKey(it) === UNCAT).length }] : []),
+  ];
+  const pickCategory = (cat) => {
+    const typed = entries.filter(e => e.item_id && String(e.quantity_used).trim() !== '');
+    if (cat !== consCat && typed.length &&
+        !window.confirm(`You have entered ${typed.length} quantity(ies) that are not saved yet. Switch category and clear them?`)) return;
+    setConsCat(cat);
+    if (!cat) { setEntries([{ ...EMPTY_ENTRY }]); return; }
+    const rows = activeItems.filter(it => itemCatKey(it) === cat)
+      .sort((a, b) => subName(a).localeCompare(subName(b)) || a.name.localeCompare(b.name))
+      .map(it => ({ ...EMPTY_ENTRY, item_id: String(it.id), fromCat: true }));
+    setEntries(rows.length ? rows : [{ ...EMPTY_ENTRY }]);
+  };
+
   const handleConsSubmit = async (ev) => {
     ev.preventDefault();
     const valid = entries.filter(e => e.item_id && parseFloat(e.quantity_used) > 0);
     if (!valid.length) { setConsErr('Add at least one item with quantity.'); return; }
     setConsSaving(true); setConsErr('');
     try {
-      await createRawMaterialConsumption({ consumption_date: consDate, entries: valid });
+      await createRawMaterialConsumption({
+        consumption_date: consDate,
+        entries: valid.map(({ fromCat, ...e }) => e),   // eslint-disable-line no-unused-vars
+      });
       showToast(`${valid.length} usage record(s) saved!`);
       setEntries([{ ...EMPTY_ENTRY }]);
+      setConsCat('');
       loadConsumption();
     } catch (err) { setConsErr(err.response?.data?.detail || 'Failed to save.'); }
     finally { setConsSaving(false); }
@@ -264,25 +300,65 @@ export default function RawMaterials() {
                   <div className="px-3 py-2 rounded-lg text-sm font-semibold"
                     style={{ background: '#fee2e2', color: '#dc2626' }}>{consErr}</div>
                 )}
-                <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-end gap-4 flex-wrap">
                   <div>
                     <label className="text-xs font-bold mb-1 block" style={{ color: B.textLight }}>Consumption Date</label>
                     <input type="date" value={consDate} onChange={e => setConsDate(e.target.value)}
                       className="border-2 rounded-xl px-3 py-2 text-sm outline-none"
                       style={{ borderColor: '#e8d5a3' }} />
                   </div>
+                  {/* Category → lists all materials of that category below */}
+                  <div className="min-w-[220px]">
+                    <label className="text-xs font-bold mb-1 block" style={{ color: B.textLight }}>Category</label>
+                    <select value={consCat} onChange={e => pickCategory(e.target.value)}
+                      className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none"
+                      style={{ borderColor: consCat ? B.gold : '#e8d5a3' }}>
+                      <option value="">— Select Category —</option>
+                      {consCategories.map(c => (
+                        <option key={c.key} value={c.key}>{c.name} ({c.n} item{c.n !== 1 ? 's' : ''})</option>
+                      ))}
+                    </select>
+                  </div>
+                  {/* Save on the right — no need to scroll down after entering quantities */}
+                  <div className="ml-auto flex items-center gap-3">
+                    <span className="text-xs" style={{ color: B.textLight }}>
+                      {entries.filter(e => e.item_id && parseFloat(e.quantity_used) > 0).length} item(s) with quantity
+                    </span>
+                    <button type="submit" disabled={consSaving}
+                      className="text-sm font-bold px-6 py-2.5 rounded-xl active:scale-95 disabled:opacity-60"
+                      style={{ background: `linear-gradient(135deg,#b8860b,${B.gold},${B.goldLight})`, color: B.darkBrown }}>
+                      {consSaving ? 'Saving…' : 'Save Usage Record'}
+                    </button>
+                  </div>
                 </div>
+                <p className="text-xs" style={{ color: B.textLight }}>
+                  Enter quantities only for what was used — items left blank are skipped. Press Enter in any box to save.
+                </p>
 
                 {/* Entry rows */}
                 <div className="space-y-3">
                   {entries.map((en, i) => {
                     const selItem = activeItems.find(it => String(it.id) === String(en.item_id));
+                    // Subcategory heading when listing a category's items
+                    const sub = en.fromCat && selItem ? (subName(selItem) || 'Other items') : null;
+                    const prev = i > 0 ? entries[i - 1] : null;
+                    const prevItem = prev?.fromCat ? activeItems.find(it => String(it.id) === String(prev.item_id)) : null;
+                    const showHead = sub && (!prevItem || (subName(prevItem) || 'Other items') !== sub);
                     return (
-                      <div key={i} className="rounded-xl p-3 border flex flex-wrap gap-3 items-end"
+                      <div key={i}>
+                      {showHead && (
+                        <p className="text-xs font-extrabold uppercase tracking-widest mt-2 mb-1.5 px-1" style={{ color: B.brown }}>{sub}</p>
+                      )}
+                      <div className="rounded-xl p-3 border flex flex-wrap gap-3 items-end"
                         style={{ borderColor: '#e8d5a3', background: '#fffbf2' }}>
                         {/* Item */}
                         <div className="flex-1 min-w-[180px]">
                           <label className="text-xs font-bold mb-1 block" style={{ color: B.textLight }}>Raw Material *</label>
+                          {en.fromCat && selItem ? (
+                            <div className="px-3 py-2 text-sm font-semibold rounded-xl" style={{ color: B.darkBrown, background: '#fff', border: '2px solid #f0e0c0' }}>
+                              {selItem.name} <span className="text-xs font-normal text-gray-400">({selItem.unit})</span>
+                            </div>
+                          ) : (
                           <select value={en.item_id}
                             onChange={e => updateEntry(i, 'item_id', e.target.value)}
                             className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none"
@@ -294,6 +370,7 @@ export default function RawMaterials() {
                               </option>
                             ))}
                           </select>
+                          )}
                         </div>
                         {/* Qty */}
                         <div className="w-32">
@@ -334,21 +411,24 @@ export default function RawMaterials() {
                           </button>
                         )}
                       </div>
+                      </div>
                     );
                   })}
                 </div>
 
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-3 justify-between">
                   <button type="button" onClick={addEntryRow}
                     className="text-sm font-bold px-4 py-2 rounded-xl active:scale-95"
                     style={{ background: '#f0f9ff', border: '1px dashed #7c3aed', color: '#7c3aed' }}>
                     + Add Another Item
                   </button>
-                  <button type="submit" disabled={consSaving}
-                    className="text-sm font-bold px-6 py-2 rounded-xl active:scale-95 disabled:opacity-60"
-                    style={{ background: `linear-gradient(135deg,#b8860b,${B.gold},${B.goldLight})`, color: B.darkBrown }}>
-                    {consSaving ? 'Saving…' : 'Save Usage Record'}
-                  </button>
+                  {entries.length > 4 && (
+                    <button type="submit" disabled={consSaving}
+                      className="text-sm font-bold px-6 py-2 rounded-xl active:scale-95 disabled:opacity-60"
+                      style={{ background: `linear-gradient(135deg,#b8860b,${B.gold},${B.goldLight})`, color: B.darkBrown }}>
+                      {consSaving ? 'Saving…' : 'Save Usage Record'}
+                    </button>
+                  )}
                 </div>
               </form>
             </div>

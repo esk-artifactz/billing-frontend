@@ -22,38 +22,24 @@ const suggestQty = (it) => {
   return Math.max(Math.ceil((target - have) * 100) / 100, 0);
 };
 
-// Preferred supplier: the linked supplier bought from most recently
-const preferredSupplier = (it) => {
-  const list = (it.suppliers || []).filter(s => s.active !== false);
-  if (!list.length) return null;
-  return [...list].sort((a, b) => String(b.last_date || '').localeCompare(String(a.last_date || '')))[0];
-};
-
 export default function RawMaterialPurchaseList() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
-  const [items, setItems]     = useState([]);   // low-stock rows with editable qty / supplier / rate
+  const [items, setItems]     = useState([]);   // low-stock rows with editable buy qty
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
   const [toast, setToast]     = useState(null);
+  const [supItem, setSupItem] = useState(null); // item whose suppliers popup is open
   const showToast = (msg, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); };
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
       const res = await getRawMaterialStock();
-      const low = (res.data.items || []).filter(i => i.active && i.low_stock);
-      setItems(low.map(i => {
-        const sup = preferredSupplier(i);
-        return {
-          ...i,
-          pick: true,
-          buy_qty: String(suggestQty(i)),
-          supplier_id: sup ? String(sup.id) : '',
-          rate: String(sup?.last_rate ?? i.last_rate ?? ''),
-        };
-      }));
+      const low = (res.data.items || []).filter(i => i.active && i.low_stock)
+        .sort((a, b) => (parseFloat(a.in_stock) > 0) - (parseFloat(b.in_stock) > 0) || a.name.localeCompare(b.name));
+      setItems(low.map(i => ({ ...i, pick: true, buy_qty: String(suggestQty(i)) })));
     } catch (err) {
       if (err.response?.status === 401 || err.response?.status === 403) { signOut(); navigate('/login'); return; }
       setError('Failed to load raw material stock.');
@@ -61,53 +47,29 @@ export default function RawMaterialPurchaseList() {
   }, [navigate, signOut]);
   useEffect(() => { load(); }, [load]);
 
-  const setRow = (id, field, val) => setItems(list => list.map(r => {
-    if (r.id !== id) return r;
-    const next = { ...r, [field]: val };
-    if (field === 'supplier_id') {   // switch to that supplier's last rate
-      const s = (r.suppliers || []).find(x => String(x.id) === String(val));
-      next.rate = String(s?.last_rate ?? r.last_rate ?? '');
-    }
-    return next;
-  }));
+  const setRow = (id, field, val) => setItems(list => list.map(r => (r.id === id ? { ...r, [field]: val } : r)));
+  const picked = items.filter(r => r.pick && parseFloat(r.buy_qty) > 0);
 
-  const supplierName = (r) => (r.suppliers || []).find(s => String(s.id) === String(r.supplier_id))?.name || 'Local shop / no supplier';
-  const picked  = items.filter(r => r.pick && parseFloat(r.buy_qty) > 0);
-  const amount  = (r) => (parseFloat(r.buy_qty) || 0) * (parseFloat(r.rate) || 0);
-  const total   = picked.reduce((s, r) => s + amount(r), 0);
-
-  // Group the picked items by supplier for ordering
-  const groups = Object.values(picked.reduce((acc, r) => {
-    const key = r.supplier_id || 'none';
-    acc[key] = acc[key] || { key, supplier_id: r.supplier_id, name: supplierName(r), rows: [] };
-    acc[key].rows.push(r);
-    return acc;
-  }, {})).sort((a, b) => (a.key === 'none') - (b.key === 'none') || a.name.localeCompare(b.name));
-
-  const listText = (g) => [
-    `Crown Tea Hub — Purchase list (${todayLabel()})`,
-    g ? `Supplier: ${g.name}` : '',
-    ...(g ? g.rows : picked).map((r, i) => `${i + 1}. ${r.name} — ${fmtQty(r.buy_qty)} ${r.unit}`),
-  ].filter(Boolean).join('\n');
-
-  const copyList = async (g) => {
-    try { await navigator.clipboard.writeText(listText(g)); showToast('List copied — paste it in WhatsApp / SMS'); }
+  const copyList = async () => {
+    const text = [
+      `Crown Tea Hub — Items to buy (${todayLabel()})`,
+      ...picked.map((r, i) => `${i + 1}. ${r.name} — ${fmtQty(r.buy_qty)} ${r.unit}`),
+    ].join('\n');
+    try { await navigator.clipboard.writeText(text); showToast('List copied — paste it in WhatsApp / SMS'); }
     catch { showToast('Could not copy — select and copy the list manually', false); }
   };
 
-  // Open Raw Material Stock → Add Purchase with this supplier's items filled in
-  const recordPurchase = (g) => {
+  // Open Raw Material Stock → Add Purchase with the ticked items filled in (choose the supplier there)
+  const recordPurchase = () => {
     navigate('/raw-material-stock', {
       state: {
         prefill: {
-          supplier_id: g.supplier_id || '',
-          lines: g.rows.map(r => ({ item_id: String(r.id), quantity: String(r.buy_qty), rate: r.rate === '' ? '' : String(r.rate) })),
+          supplier_id: '',
+          lines: picked.map(r => ({ item_id: String(r.id), quantity: String(r.buy_qty), rate: r.last_rate != null ? String(r.last_rate) : '' })),
         },
       },
     });
   };
-
-  const inp = { borderColor: '#e8d5a3' };
 
   return (
     <div className="min-h-screen" style={{ background: `linear-gradient(160deg,${B.cream} 0%,${B.creamMid} 60%,#ede0c4 100%)` }}>
@@ -137,24 +99,28 @@ export default function RawMaterialPurchaseList() {
           style={{ background: toast.ok ? '#16a34a' : '#dc2626' }}>{toast.msg}</div>
       )}
 
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-5">
-        {/* Header */}
-        <div className="rounded-2xl shadow-md overflow-hidden print:hidden"
-          style={{ background: `linear-gradient(135deg,${B.darkBrown},#5a3510)`, border: `1px solid ${B.gold}` }}>
-          <div className="h-1" style={{ background: `linear-gradient(90deg,#b8860b,${B.goldLight},#b8860b)` }} />
-          <div className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-extrabold" style={{ color: B.goldLight, fontFamily: 'Georgia, serif' }}>Items to Purchase</h2>
-              <p className="text-sm mt-1" style={{ color: '#c8a84b' }}>
-                Raw materials at or below their alert level (or out of stock). Adjust quantities, then copy, print or record the purchase.
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#c8a84b' }}>Estimated Cost</p>
-              <p className="text-2xl font-extrabold" style={{ color: B.goldLight }}>{fmtINR(total)}</p>
-              <p className="text-xs" style={{ color: '#c8a84b' }}>{picked.length} of {items.length} item{items.length !== 1 ? 's' : ''} selected</p>
-            </div>
+      <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+        {/* Header + actions */}
+        <div className="flex flex-wrap items-end justify-between gap-3 print:hidden">
+          <div>
+            <h2 className="text-xl font-extrabold" style={{ color: B.brown, fontFamily: 'Georgia, serif' }}>Items to Buy</h2>
+            <p className="text-sm" style={{ color: B.textLight }}>
+              {loading ? 'Loading…' : `${picked.length} of ${items.length} item${items.length !== 1 ? 's' : ''} selected · low or out of stock`}
+            </p>
           </div>
+          {items.length > 0 && (
+            <div className="flex gap-2">
+              <button onClick={copyList} disabled={!picked.length}
+                className="text-sm font-bold px-4 py-2 rounded-xl disabled:opacity-50"
+                style={{ background: '#fff', border: '1px solid #d4a017', color: B.text }}>Copy List</button>
+              <button onClick={() => window.print()} disabled={!picked.length}
+                className="text-sm font-bold px-4 py-2 rounded-xl disabled:opacity-50"
+                style={{ background: B.darkBrown, color: B.goldLight }}>Print</button>
+              <button onClick={recordPurchase} disabled={!picked.length}
+                className="text-sm font-bold px-4 py-2 rounded-xl disabled:opacity-50"
+                style={{ background: `linear-gradient(135deg,#b8860b,${B.gold},${B.goldLight})`, color: B.darkBrown }}>Record Purchase →</button>
+            </div>
+          )}
         </div>
 
         {error && <div className="rounded-xl px-4 py-3 text-sm font-semibold" style={{ background: '#fee2e2', color: '#dc2626' }}>{error}</div>}
@@ -165,141 +131,122 @@ export default function RawMaterialPurchaseList() {
           </div>
         ) : items.length === 0 ? (
           <div className="rounded-2xl p-10 text-center shadow-sm" style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
-            <p className="text-lg font-bold" style={{ color: '#16a34a' }}>All raw materials are above their alert level</p>
+            <p className="text-lg font-bold" style={{ color: '#16a34a' }}>Nothing to buy — all raw materials are above their alert level</p>
             <p className="text-sm mt-1" style={{ color: B.textLight }}>
               Set an <strong>Alert Level</strong> for each material on Raw Material Stock → Stock in Hand, so it appears here when it runs low.
             </p>
           </div>
         ) : (
-          <>
-            {/* All low-stock items */}
-            <div className="rounded-2xl shadow-sm overflow-hidden print:hidden" style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
-                      <th className="px-3 py-3 text-left">
-                        <input type="checkbox" checked={items.every(r => r.pick)}
-                          onChange={e => setItems(list => list.map(r => ({ ...r, pick: e.target.checked })))} />
-                      </th>
-                      {['Material', 'In Stock', 'Alert Level', 'Buy Qty', 'Supplier', 'Rate ₹', 'Est. Cost'].map(h => (
-                        <th key={h} className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: B.goldLight }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((r, idx) => (
-                      <tr key={r.id} style={{ background: idx % 2 ? '#fffbf2' : '#fff', borderBottom: '1px solid #f0e0c0', opacity: r.pick ? 1 : 0.5 }}>
-                        <td className="px-3 py-2">
-                          <input type="checkbox" checked={r.pick} onChange={e => setRow(r.id, 'pick', e.target.checked)} />
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="font-semibold" style={{ color: B.darkBrown }}>{r.name}</div>
-                          {r.category && <div className="text-xs text-gray-400">{r.category}</div>}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <span className="font-bold" style={{ color: '#dc2626' }}>{fmtQty(r.in_stock)} {r.unit}</span>
-                          <span className="ml-1 text-xs font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#dc2626' }}>
-                            {parseFloat(r.in_stock) <= 0 ? 'Out' : 'Low'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-xs whitespace-nowrap" style={{ color: B.textLight }}>
-                          {r.min_stock != null ? `${fmtQty(r.min_stock)} ${r.unit}` : 'not set'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <input type="number" min="0" step="any" value={r.buy_qty} onChange={e => setRow(r.id, 'buy_qty', e.target.value)}
-                            className="w-20 border-2 rounded-lg px-2 py-1 text-sm outline-none" style={inp} />
-                          <span className="ml-1 text-xs" style={{ color: B.textLight }}>{r.unit}</span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <select value={r.supplier_id} onChange={e => setRow(r.id, 'supplier_id', e.target.value)}
-                            className="border-2 rounded-lg px-2 py-1 text-xs outline-none max-w-[170px]" style={inp}>
-                            <option value="">Local shop / no supplier</option>
-                            {(r.suppliers || []).filter(s => s.active !== false).map(s => (
-                              <option key={s.id} value={s.id}>{s.name}{s.last_rate != null ? ` (₹${parseFloat(s.last_rate).toFixed(2)})` : ''}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-3 py-2">
-                          <input type="number" min="0" step="0.01" value={r.rate} onChange={e => setRow(r.id, 'rate', e.target.value)}
-                            placeholder="—" className="w-20 border-2 rounded-lg px-2 py-1 text-sm outline-none" style={inp} />
-                        </td>
-                        <td className="px-3 py-2 font-bold whitespace-nowrap" style={{ color: B.brown }}>
-                          {r.rate !== '' ? fmtINR(amount(r)) : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="px-4 py-2 text-xs" style={{ color: B.textLight }}>
-                Buy Qty is suggested to bring stock up to 2 × the alert level. Supplier defaults to the one you last bought from; rate is their last price.
-              </p>
+          <div id="purchase-list-print" className="rounded-2xl shadow-sm overflow-hidden" style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
+            <div className="hidden print:block px-4 pt-4 pb-2">
+              <h2 className="text-lg font-bold">Crown Tea Hub — Items to Buy ({todayLabel()})</h2>
             </div>
-
-            {/* Grouped by supplier — order / record */}
-            <div className="flex items-center justify-between flex-wrap gap-2 print:hidden">
-              <h3 className="font-bold" style={{ color: B.brown }}>By Supplier</h3>
-              <div className="flex gap-2">
-                <button onClick={() => copyList(null)} disabled={!picked.length}
-                  className="text-sm font-bold px-4 py-2 rounded-xl disabled:opacity-50"
-                  style={{ background: '#fff', border: '1px solid #d4a017', color: B.text }}>Copy Full List</button>
-                <button onClick={() => window.print()} disabled={!picked.length}
-                  className="text-sm font-bold px-4 py-2 rounded-xl disabled:opacity-50"
-                  style={{ background: B.darkBrown, color: B.goldLight }}>Print</button>
-              </div>
-            </div>
-
-            <div id="purchase-list-print" className="grid md:grid-cols-2 gap-4">
-              <div className="hidden print:block md:col-span-2">
-                <h2 className="text-lg font-bold">Crown Tea Hub — Purchase List ({todayLabel()})</h2>
-              </div>
-              {groups.length === 0 && (
-                <p className="text-sm print:hidden" style={{ color: B.textLight }}>Select items above to build the list.</p>
-              )}
-              {groups.map(g => {
-                const gTotal = g.rows.reduce((s, r) => s + amount(r), 0);
-                return (
-                  <div key={g.key} className="rounded-2xl shadow-sm overflow-hidden" style={{ background: '#fff', border: '1px solid #e8d5a3', breakInside: 'avoid' }}>
-                    <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: '#fffbf2', borderBottom: '1px solid #e8d5a3' }}>
-                      <span className="font-bold text-sm" style={{ color: B.darkBrown }}>{g.name}</span>
-                      <span className="text-sm font-extrabold" style={{ color: B.brown }}>{fmtINR(gTotal)}</span>
-                    </div>
-                    <table className="w-full text-sm">
-                      <tbody>
-                        {g.rows.map(r => (
-                          <tr key={r.id} style={{ borderTop: '1px solid #f0e0c0' }}>
-                            <td className="px-4 py-1.5" style={{ color: B.darkBrown }}>{r.name}</td>
-                            <td className="px-4 py-1.5 text-right font-semibold whitespace-nowrap">{fmtQty(r.buy_qty)} {r.unit}</td>
-                            <td className="px-4 py-1.5 text-right text-xs whitespace-nowrap" style={{ color: B.textLight }}>
-                              {r.rate !== '' ? fmtINR(amount(r)) : ''}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="px-4 py-2 flex gap-2 print:hidden" style={{ borderTop: '1px solid #f0e0c0' }}>
-                      <button onClick={() => copyList(g)} className="flex-1 text-xs font-bold py-1.5 rounded-lg"
-                        style={{ background: '#fff9ee', border: '1px solid #e8d5a3', color: B.text }}>Copy</button>
-                      <button onClick={() => recordPurchase(g)} className="flex-1 text-xs font-bold py-1.5 rounded-lg"
-                        style={{ background: `linear-gradient(135deg,#b8860b,${B.gold},${B.goldLight})`, color: B.darkBrown }}>
-                        Record Purchase →
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
+                  <th className="px-3 py-3 text-left print:hidden">
+                    <input type="checkbox" checked={items.every(r => r.pick)}
+                      onChange={e => setItems(list => list.map(r => ({ ...r, pick: e.target.checked })))} />
+                  </th>
+                  {['#', 'Item', 'In Stock', 'Buy Qty'].map(h => (
+                    <th key={h} className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: B.goldLight }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((r, idx) => (
+                  <tr key={r.id} className={r.pick && parseFloat(r.buy_qty) > 0 ? '' : 'print:hidden'}
+                    style={{ background: idx % 2 ? '#fffbf2' : '#fff', borderBottom: '1px solid #f0e0c0', opacity: r.pick ? 1 : 0.45 }}>
+                    <td className="px-3 py-2.5 print:hidden">
+                      <input type="checkbox" checked={r.pick} onChange={e => setRow(r.id, 'pick', e.target.checked)} />
+                    </td>
+                    <td className="px-3 py-2.5 text-xs" style={{ color: B.textLight }}>{idx + 1}</td>
+                    <td className="px-3 py-2.5">
+                      <button onClick={() => setSupItem(r)} title="See suppliers"
+                        className="font-semibold text-left hover:underline" style={{ color: B.darkBrown }}>
+                        {r.name}
                       </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </>
+                      {r.category && <div className="text-xs text-gray-400 print:hidden">{r.category}</div>}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className="font-bold" style={{ color: '#dc2626' }}>{fmtQty(r.in_stock)} {r.unit}</span>
+                      <span className="ml-1 text-xs font-bold px-1.5 py-0.5 rounded-full print:hidden" style={{ background: '#fee2e2', color: '#dc2626' }}>
+                        {parseFloat(r.in_stock) <= 0 ? 'Out' : 'Low'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <input type="number" min="0" step="any" value={r.buy_qty} onChange={e => setRow(r.id, 'buy_qty', e.target.value)}
+                        className="w-20 border-2 rounded-lg px-2 py-1 text-sm outline-none print:hidden" style={{ borderColor: '#e8d5a3' }} />
+                      <span className="hidden print:inline font-bold">{fmtQty(r.buy_qty)}</span>
+                      <span className="ml-1 text-xs" style={{ color: B.textLight }}>{r.unit}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="px-4 py-2 text-xs print:hidden" style={{ color: B.textLight }}>
+              Buy Qty is suggested to bring stock up to 2 × the alert level — change it as needed. Tap an item name to see its suppliers.
+            </p>
+          </div>
         )}
       </div>
 
-      {/* Print only the grouped list */}
+      {/* Suppliers popup for one item */}
+      {supItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 print:hidden" style={{ background: 'rgba(45,26,14,0.6)' }}
+          onClick={ev => { if (ev.target === ev.currentTarget) setSupItem(null); }}>
+          <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden" style={{ background: '#fff', border: `2px solid ${B.gold}` }}>
+            <div className="h-1" style={{ background: `linear-gradient(90deg,#b8860b,${B.goldLight},#b8860b)` }} />
+            <div className="px-5 pt-4 pb-2 flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-extrabold" style={{ color: B.brown }}>{supItem.name}</h3>
+                <p className="text-xs" style={{ color: B.textLight }}>
+                  In stock {fmtQty(supItem.in_stock)} {supItem.unit}
+                  {supItem.min_stock != null && ` · alert at ${fmtQty(supItem.min_stock)} ${supItem.unit}`}
+                </p>
+              </div>
+              <button onClick={() => setSupItem(null)} autoFocus className="text-2xl font-bold leading-none" style={{ color: B.textLight }}>×</button>
+            </div>
+            <div className="px-5 pb-5">
+              <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: B.textLight }}>Suppliers</p>
+              {(supItem.suppliers || []).length === 0 ? (
+                <p className="text-sm" style={{ color: B.textLight }}>
+                  No supplier linked. Link one on Raw Material Stock → Stock in Hand → tap the In Stock figure → + Link supplier.
+                  {supItem.last_rate != null && <><br />Last bought at {fmtINR(supItem.last_rate)}/{supItem.unit}.</>}
+                </p>
+              ) : (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #e8d5a3' }}>
+                  {[...supItem.suppliers]
+                    .sort((a, b) => String(b.last_date || '').localeCompare(String(a.last_date || '')))
+                    .map((s, i) => (
+                      <div key={s.id} className="flex items-center justify-between px-3 py-2.5"
+                        style={{ borderTop: i ? '1px solid #f0e0c0' : 'none', opacity: s.active === false ? 0.5 : 1 }}>
+                        <div>
+                          <div className="text-sm font-semibold" style={{ color: B.darkBrown }}>
+                            {s.name}{i === 0 && s.last_date && <span className="ml-1 text-xs font-bold" style={{ color: '#16a34a' }}>· last used</span>}
+                          </div>
+                          <div className="text-xs" style={{ color: B.textLight }}>
+                            {s.last_date ? `Last bought ${String(s.last_date).slice(0, 10)}` : 'Not bought yet'}
+                          </div>
+                        </div>
+                        <span className="text-sm font-bold whitespace-nowrap" style={{ color: B.brown }}>
+                          {s.last_rate != null ? `${fmtINR(s.last_rate)}/${supItem.unit}` : '—'}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print only the list */}
       <style>{`
         @media print {
           body * { visibility: hidden !important; }
           #purchase-list-print, #purchase-list-print * { visibility: visible !important; }
-          #purchase-list-print { position: absolute; top: 0; left: 0; width: 100%; }
+          #purchase-list-print { position: absolute; top: 0; left: 0; width: 100%; border: none !important; box-shadow: none !important; }
         }
       `}</style>
     </div>

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useEscClose } from '../hooks/useEscClose';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -12,7 +12,7 @@ import OfflineBanner from '../components/OfflineBanner';
 import Receipt from '../components/Receipt';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 
-// ─── Brand colours ────────────────────────────────────────────────────────────
+// --- Brand colours ------------------------------------------------------------
 const B = {
   darkBrown:  '#2d1a0e',
   midBrown:   '#4a2c0a',
@@ -33,7 +33,7 @@ const B = {
 
 const fmt = (n) => parseFloat(n || 0).toFixed(2);
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+// --- Modal --------------------------------------------------------------------
 
 function Modal({ title, onClose, children, wide }) {
   return (
@@ -54,7 +54,7 @@ function Modal({ title, onClose, children, wide }) {
   );
 }
 
-// ─── Checkout Modal ───────────────────────────────────────────────────────────
+// --- Checkout Modal -----------------------------------------------------------
 
 function CheckoutModal({ cart, onClose, onSuccess }) {
   const [paymentMethod, setPaymentMethod] = useState('cash');
@@ -128,8 +128,8 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
     if (loading) return;
     // Cash with the tendered box left empty = exact amount
     const cashGiven = paymentMethod === 'cash' && amountTendered === '' ? grandTotal : tendered;
-    if (paymentMethod === 'cash' && cashGiven < grandTotal) { setError('Amount tendered must be ≥ grand total'); return; }
-    if (paymentMethod === 'split' && !spValid) { setError(`Split amounts must add up to ₹${fmt(grandTotal)}`); return; }
+    if (paymentMethod === 'cash' && cashGiven < grandTotal) { setError('Amount tendered must be = grand total'); return; }
+    if (paymentMethod === 'split' && !spValid) { setError(`Split amounts must add up to ?${fmt(grandTotal)}`); return; }
     setLoading(true); setError('');
     try {
       const payload = {
@@ -157,7 +157,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
   };
 
   // Enter anywhere in checkout confirms the payment (buttons keep their own Enter = click)
-  // ── Keyboard shortcuts (work on full-size and laptop keyboards) ──────────
+  // -- Keyboard shortcuts (work on full-size and laptop keyboards) ----------
   // Enter = confirm · F5/Alt+C cash · F6/Alt+U UPI · F7/Alt+K card · F4/Alt+S split
   // Alt+D / D discount · Alt+P / P parcel · Alt+O / O other things
   // (plain letters only while the cursor is in an amount box or on a button,
@@ -201,14 +201,14 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
 
         {/* Order summary */}
         <div className="rounded-xl p-4 space-y-2 text-sm" style={{ background: '#fff9ee', border: B.goldBorder }}>
-          <div className="flex justify-between" style={{ color: B.textLight }}><span>Subtotal</span><span>₹{fmt(subtotal)}</span></div>
-          {discountVal > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-₹{fmt(discountVal)}</span></div>}
-          {taxTotal    > 0 && <div className="flex justify-between" style={{ color: B.textLight }}><span>GST</span><span>+₹{fmt(taxTotal)}</span></div>}
-          {parcelVal   > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Parcel Charge</span><span>+₹{fmt(parcelVal)}</span></div>}
-          {otherVal    > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Other Things{otherDesc.trim() ? ` (${otherDesc.trim()})` : ''}</span><span>+₹{fmt(otherVal)}</span></div>}
-          {roundOff   !== 0 && <div className="flex justify-between text-xs" style={{ color: '#aaa' }}><span>Round Off</span><span>₹{fmt(roundOff)}</span></div>}
+          <div className="flex justify-between" style={{ color: B.textLight }}><span>Subtotal</span><span>?{fmt(subtotal)}</span></div>
+          {discountVal > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-?{fmt(discountVal)}</span></div>}
+          {taxTotal    > 0 && <div className="flex justify-between" style={{ color: B.textLight }}><span>GST</span><span>+?{fmt(taxTotal)}</span></div>}
+          {parcelVal   > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Parcel Charge</span><span>+?{fmt(parcelVal)}</span></div>}
+          {otherVal    > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Other Things{otherDesc.trim() ? ` (${otherDesc.trim()})` : ''}</span><span>+?{fmt(otherVal)}</span></div>}
+          {roundOff   !== 0 && <div className="flex justify-between text-xs" style={{ color: '#aaa' }}><span>Round Off</span><span>?{fmt(roundOff)}</span></div>}
           <div className="flex justify-between font-bold text-lg border-t pt-2" style={{ borderColor: B.gold, color: B.text }}>
-            <span>Total</span><span style={{ color: B.goldDark }}>₹{fmt(grandTotal)}</span>
+            <span>Total</span><span style={{ color: B.goldDark }}>?{fmt(grandTotal)}</span>
           </div>
         </div>
 
@@ -216,7 +216,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         <div className="flex gap-2">
           {showDiscount || discountVal > 0 ? (
             <div className="flex-1">
-              <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Discount (₹)</label>
+              <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Discount (?)</label>
               <input ref={discountRef} type="number" value={discount} onChange={e => setDiscount(e.target.value)}
                 placeholder="0.00" min="0" style={inputStyle} />
             </div>
@@ -229,7 +229,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
           )}
           {showParcel || parcelVal > 0 ? (
             <div className="flex-1">
-              <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Parcel Charge (₹)</label>
+              <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Parcel Charge (?)</label>
               <input ref={parcelRef} type="number" value={parcel} onChange={e => setParcel(e.target.value)}
                 placeholder="0.00" min="0" style={inputStyle} autoFocus />
             </div>
@@ -245,7 +245,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         {/* Other Things — items not in the product list, added as one amount */}
         <div>
           <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>
-            Other Things (₹) <span className="font-normal opacity-70">(O)</span>
+            Other Things (?) <span className="font-normal opacity-70">(O)</span>
           </label>
           <div className="grid grid-cols-2 gap-2">
             <input type="text" value={otherDesc} onChange={e => setOtherDesc(e.target.value)}
@@ -281,9 +281,9 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
               Split Bill — Cash + UPI / Card
             </p>
             {[
-              { key: 'cash', label: 'Cash (₹)',        val: splitCash, color: '#16a34a' },
-              { key: 'upi',  label: 'UPI (₹)',         val: splitUpi,  color: '#7c3aed' },
-              { key: 'card', label: 'Card (₹)',        val: splitCard, color: '#1d4ed8' },
+              { key: 'cash', label: 'Cash (?)',        val: splitCash, color: '#16a34a' },
+              { key: 'upi',  label: 'UPI (?)',         val: splitUpi,  color: '#7c3aed' },
+              { key: 'card', label: 'Card (?)',        val: splitCard, color: '#1d4ed8' },
             ].map(row => (
               <div key={row.key} className="flex items-center gap-2">
                 <label className="w-20 text-xs font-bold" style={{ color: row.color }}>{row.label}</label>
@@ -302,11 +302,11 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
             {/* Running total + remainder */}
             <div className="flex justify-between items-center pt-1 border-t" style={{ borderColor: '#e8d5a3' }}>
               <span className="text-xs font-bold" style={{ color: B.text }}>
-                Collected: ₹{fmt(spTotal)}
+                Collected: ?{fmt(spTotal)}
               </span>
               <span className="text-xs font-extrabold"
                 style={{ color: spValid ? '#16a34a' : '#dc2626' }}>
-                {spValid ? '✓ Matches total' : `Remaining: ₹${fmt(spRemain)}`}
+                {spValid ? '? Matches total' : `Remaining: ?${fmt(spRemain)}`}
               </span>
             </div>
           </div>
@@ -315,7 +315,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         {/* Tendered (cash only) */}
         {paymentMethod === 'cash' && (
           <div>
-            <label className="block text-sm font-semibold mb-1.5" style={{ color: B.text }}>Amount Tendered (₹)</label>
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: B.text }}>Amount Tendered (?)</label>
             <input ref={tenderedRef} type="number" value={amountTendered} onChange={e => setAmountTendered(e.target.value)}
               placeholder={fmt(grandTotal)} min={grandTotal} style={inputStyle} />
             <p className="text-xs mt-1" style={{ color: B.textLight }}>Press Enter to confirm — leave empty for exact amount</p>
@@ -325,7 +325,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
                   <button key={v} onClick={() => setAmountTendered(String(v))}
                     className="px-3 py-1 text-sm font-semibold rounded-lg transition-all active:scale-95"
                     style={{ background: '#fff9ee', border: B.goldBorder, color: B.text }}>
-                    ₹{v}
+                    ?{v}
                   </button>
                 ))}
             </div>
@@ -337,7 +337,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
           <div className="rounded-xl p-3 flex justify-between items-center"
             style={{ background: '#fffbe8', border: `1.5px solid ${B.gold}` }}>
             <span className="font-semibold" style={{ color: B.text }}>Change to Return</span>
-            <span className="font-extrabold text-2xl" style={{ color: B.goldDark }}>₹{fmt(change)}</span>
+            <span className="font-extrabold text-2xl" style={{ color: B.goldDark }}>?{fmt(change)}</span>
           </div>
         )}
 
@@ -347,14 +347,14 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
           className="w-full font-bold py-3.5 rounded-xl text-base uppercase tracking-wider transition-all active:scale-95 disabled:opacity-60"
           style={{ background: loading ? '#c8a84b' : B.goldGrad, color: B.brown, letterSpacing: '0.1em',
             boxShadow: '0 4px 15px rgba(180,130,10,0.35)' }}>
-          {loading ? 'Processing...' : `Confirm Payment  ₹${fmt(grandTotal)}`}
+          {loading ? 'Processing...' : `Confirm Payment  ?${fmt(grandTotal)}`}
         </button>
       </div>
     </Modal>
   );
 }
 
-// ─── Hold Name Modal — reference name to identify the held bill ──────────────
+// --- Hold Name Modal — reference name to identify the held bill --------------
 
 function HoldNameModal({ initialName, isUpdate, onClose, onConfirm }) {
   const [name, setName]   = useState(initialName || '');
@@ -389,7 +389,7 @@ function HoldNameModal({ initialName, isUpdate, onClose, onConfirm }) {
   );
 }
 
-// ─── Held Bills Modal ─────────────────────────────────────────────────────────
+// --- Held Bills Modal ---------------------------------------------------------
 
 function HeldBillsModal({ onClose, onRetrieve }) {
   const [heldSales, setHeldSales] = useState([]);
@@ -454,8 +454,8 @@ function HeldBillsModal({ onClose, onRetrieve }) {
                 <p className="text-xs" style={{ color: '#aaa' }}>{new Date(h.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
               </div>
               <div className="text-right">
-                <p className="font-bold" style={{ color: B.goldDark }}>₹{fmt(h.grand_total)}</p>
-                <p className="text-xs" style={{ color: '#aaa' }}>Tax: ₹{fmt(h.tax_total)}</p>
+                <p className="font-bold" style={{ color: B.goldDark }}>?{fmt(h.grand_total)}</p>
+                <p className="text-xs" style={{ color: '#aaa' }}>Tax: ?{fmt(h.tax_total)}</p>
               </div>
               <div className="flex flex-col gap-2">
                 <button onClick={() => handleRetrieve(h.hold_reference)}
@@ -477,7 +477,7 @@ function HeldBillsModal({ onClose, onRetrieve }) {
   );
 }
 
-// ─── Cart Panel ───────────────────────────────────────────────────────────────
+// --- Cart Panel ---------------------------------------------------------------
 
 function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onCheckout, onHold, onShowHeld, subtotal, gstTotal, grandTotal, lastId }) {
   return (
@@ -501,12 +501,12 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
           <div className="text-center py-10 text-sm" style={{ color: B.textLight }}>Cart is empty</div>
         ) : cart.map(item => (
           <div key={item.id} className="rounded-xl p-3"
-            title={item.id === lastId ? 'Last item — + / − / Delete / *qty act on this' : undefined}
+            title={item.id === lastId ? 'Last item — + / - / Delete / *qty act on this' : undefined}
             style={{ background: '#fff9ee', border: item.id === lastId ? `2px solid ${B.goldDark}` : B.goldBorder }}>
             <div className="flex justify-between items-start mb-2">
               <div className="flex-1 min-w-0 pr-2">
                 <p className="font-semibold text-sm truncate" style={{ color: B.text }}>{item.name}</p>
-                <p className="text-xs" style={{ color: B.textLight }}>₹{fmt(item.selling_price)} each</p>
+                <p className="text-xs" style={{ color: B.textLight }}>?{fmt(item.selling_price)} each</p>
                 {item.track_stock && item.current_stock != null && parseFloat(item.current_stock) <= 0 && (
                   <p className="text-xs font-bold mt-0.5" style={{ color: '#dc2626' }}>Out of stock</p>
                 )}
@@ -520,7 +520,7 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
               <div className="flex items-center gap-2">
                 <button onClick={() => updateQuantity(item.id, -1)}
                   className="w-8 h-8 rounded-full font-bold flex items-center justify-center transition-all active:scale-90"
-                  style={{ background: '#e8d5a3', color: B.brown }}>−</button>
+                  style={{ background: '#e8d5a3', color: B.brown }}>-</button>
                 <input
                   key={`${item.id}-${item.quantity}`}
                   type="number" inputMode="decimal" min="0" step="any"
@@ -530,7 +530,7 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
                     const v = parseFloat(e.target.value);
                     if (!isNaN(v) && v > 0) setQuantity(item.id, v);
                     else if (v === 0) removeFromCart(item.id);
-                    else e.target.value = item.quantity;   // invalid → revert
+                    else e.target.value = item.quantity;   // invalid ? revert
                   }}
                   title="Click to type quantity"
                   className="w-12 text-center font-bold text-sm rounded-lg outline-none"
@@ -541,7 +541,7 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
                   style={{ background: B.goldGrad, color: B.brown }}>+</button>
               </div>
               <span className="font-bold text-sm" style={{ color: B.goldDark }}>
-                ₹{fmt(parseFloat(item.selling_price) * item.quantity)}
+                ?{fmt(parseFloat(item.selling_price) * item.quantity)}
               </span>
             </div>
           </div>
@@ -552,11 +552,11 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
       {cart.length > 0 && (
         <div className="p-4 flex-shrink-0" style={{ borderTop: B.goldBorder, background: '#fff9ee' }}>
           <div className="space-y-1 mb-4 text-sm">
-            <div className="flex justify-between" style={{ color: B.textLight }}><span>Subtotal</span><span>₹{fmt(subtotal)}</span></div>
-            <div className="flex justify-between" style={{ color: B.textLight }}><span>GST</span><span>₹{fmt(gstTotal)}</span></div>
+            <div className="flex justify-between" style={{ color: B.textLight }}><span>Subtotal</span><span>?{fmt(subtotal)}</span></div>
+            <div className="flex justify-between" style={{ color: B.textLight }}><span>GST</span><span>?{fmt(gstTotal)}</span></div>
             <div className="flex justify-between font-bold text-base pt-2" style={{ borderTop: `1px dashed ${B.gold}`, color: B.text }}>
               <span>Total</span>
-              <span style={{ color: B.goldDark }}>₹{Math.round(grandTotal)}</span>
+              <span style={{ color: B.goldDark }}>?{Math.round(grandTotal)}</span>
             </div>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -577,7 +577,7 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
   );
 }
 
-// ─── Main Billing Page ────────────────────────────────────────────────────────
+// --- Main Billing Page --------------------------------------------------------
 
 export default function Billing() {
   const { user, signOut } = useAuth();
@@ -628,7 +628,7 @@ export default function Billing() {
     const later = () => setTimeout(focusSearch, 0);
     const onVisible = () => { if (!document.hidden) later(); };
     const onPointerUp = (e) => { if (!isField(e.target)) later(); };
-    // Leaving a cart qty box etc. without moving to another field → back to barcode box
+    // Leaving a cart qty box etc. without moving to another field ? back to barcode box
     const onFocusOut = (e) => { if (!isField(e.relatedTarget)) later(); };
     // Touch screens: don't pop the on-screen keyboard on every tap
     const touch = window.matchMedia?.('(pointer: coarse)').matches;
@@ -669,8 +669,8 @@ export default function Billing() {
     return c ? products.find(p => p.active !== false && p.barcode && p.barcode.trim().toLowerCase() === c) : undefined;
   };
 
-  // ── Fast keyboard billing ────────────────────────────────────────────────
-  const [lastAddedId, setLastAddedId] = useState(null);   // target of + / − / * / Delete
+  // -- Fast keyboard billing ------------------------------------------------
+  const [lastAddedId, setLastAddedId] = useState(null);   // target of + / - / * / Delete
   const [hi, setHi]                   = useState(0);      // highlighted suggestion
   const [soundOn, setSoundOn]         = useState(() => localStorage.getItem('billingSound') !== '0');
   const audioRef = useRef(null);
@@ -687,7 +687,7 @@ export default function Billing() {
   };
   const toggleSound = () => setSoundOn(s => { localStorage.setItem('billingSound', s ? '0' : '1'); return !s; });
 
-  // "3*101" / "101*3" / "101" / exact name → { product, qty }
+  // "3*101" / "101*3" / "101" / exact name ? { product, qty }
   const resolveEntry = (q) => {
     const byNameOrCode = (code) => {
       const c = code.trim().toLowerCase();
@@ -711,7 +711,7 @@ export default function Billing() {
   }, []);
 
   const fetchCategories = useCallback(async () => {
-    try { const res = await getCategories(); setCategories(res.data.categories || []); }
+    try { const res = await getCategories('product'); setCategories(res.data.categories || []); }
     catch { /* silent */ }
   }, []);
 
@@ -720,10 +720,10 @@ export default function Billing() {
   const lastItem = cart.find(i => i.id === lastAddedId) || cart[cart.length - 1];
 
   // Search box keys:
-  //   Enter      → add code / "3*code" / highlighted suggestion; empty box → checkout
-  //   ↑ ↓        → move through suggestions
-  //   + / −      → (empty box) change qty of the last item · "*5" Enter sets it to 5
-  //   Delete     → (empty box) remove last item · Shift/Ctrl+Delete → clear cart
+  //   Enter      ? add code / "3*code" / highlighted suggestion; empty box ? checkout
+  //   ? ?        ? move through suggestions
+  //   + / -      ? (empty box) change qty of the last item · "*5" Enter sets it to 5
+  //   Delete     ? (empty box) remove last item · Shift/Ctrl+Delete ? clear cart
   //   Scanners send Enter after the barcode, so they work the same way
   const handleSearchKeyDown = (e) => {
     const q = searchQuery.trim();
@@ -746,7 +746,7 @@ export default function Billing() {
     if (e.key === 'Escape') { e.preventDefault(); setSearchQuery(''); return; }
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    // "*5" → set the last item's quantity
+    // "*5" ? set the last item's quantity
     if (q.startsWith('*')) {
       const n = parseFloat(q.slice(1));
       if (lastItem && n > 0) { setQuantity(lastItem.id, n); flashScanMsg(`${lastItem.name} × ${n}`, true); beep(); }
@@ -771,7 +771,7 @@ export default function Billing() {
   const handleSearchChange = (q) => {
     setSearchQuery(q);
     setHi(0);
-    // Scan mode: exact barcode match → add instantly (for scanners that don't send Enter)
+    // Scan mode: exact barcode match ? add instantly (for scanners that don't send Enter)
     if (inputMode !== 'scan') return;
     const match = findByBarcode(q);
     if (match) { addToCart(match); setSearchQuery(''); flashScanMsg(`Added: ${match.name}`, true); beep(); }
@@ -785,7 +785,7 @@ export default function Billing() {
       (p.barcode && p.barcode.toLowerCase().includes(searchLower));
     return matchCat && matchSearch && p.active;
   });
-  // Dropdown suggestions while typing (Type mode) — ↑ ↓ to pick, Enter to add
+  // Dropdown suggestions while typing (Type mode) — ? ? to pick, Enter to add
   const suggestions = inputMode === 'text' && searchLower && !searchLower.includes('*') && !searchLower.startsWith('*')
     ? products.filter(p => p.active && (p.name.toLowerCase().includes(searchLower) ||
         (p.barcode && p.barcode.toLowerCase().startsWith(searchLower))))
@@ -827,7 +827,7 @@ export default function Billing() {
 
   const removeFromCart = (productId) => setCart(prev => prev.filter(i => i.id !== productId));
 
-  // Camera scan result → add matching product, return status message for the modal
+  // Camera scan result ? add matching product, return status message for the modal
   const handleScanResult = (code) => {
     const match = findByBarcode(code);
     if (!match) return `No product for barcode ${code}`;
@@ -964,42 +964,42 @@ export default function Billing() {
     const cat = categories.find(c => c.id === product.category_id);
     const h = (product.name + ' ' + (cat ? cat.name : '')).toLowerCase();
     if (h.includes('masala tea') || h.includes('masala chai') || h.includes('chai')) return String.fromCodePoint(0x1F375);
-    if (h.includes('tea'))             return String.fromCodePoint(0x1F375);  // 🍵
-    if (h.includes('coffee') || h.includes('cappuccino') || h.includes('latte') || h.includes('espresso') || h.includes('mocha')) return String.fromCodePoint(0x2615); // ☕
-    if (h.includes('juice') || h.includes('fresh juice') || h.includes('lemon') || h.includes('orange juice') || h.includes('mango juice')) return String.fromCodePoint(0x1F9C3); // 🧃
-    if (h.includes('lassi') || h.includes('buttermilk') || h.includes('chaas')) return String.fromCodePoint(0x1F95B); // 🥛
-    if (h.includes('milkshake') || h.includes('shake') || h.includes('smoothie')) return String.fromCodePoint(0x1F964); // 🥤
-    if (h.includes('cold drink') || h.includes('soda') || h.includes('cola') || h.includes('pepsi') || h.includes('sprite')) return String.fromCodePoint(0x1F964); // 🥤
-    if (h.includes('water'))           return String.fromCodePoint(0x1F4A7); // 💧
-    if (h.includes('sandwich') || h.includes('burger') || h.includes('sub') || h.includes('wrap') || h.includes('roll')) return String.fromCodePoint(0x1F96A); // 🥪
-    if (h.includes('pizza'))           return String.fromCodePoint(0x1F355); // 🍕
-    if (h.includes('pasta') || h.includes('noodle') || h.includes('maggi')) return String.fromCodePoint(0x1F35D); // 🍝
-    if (h.includes('biryani') || h.includes('rice') || h.includes('pulao')) return String.fromCodePoint(0x1F35A); // 🍚
-    if (h.includes('dosa') || h.includes('idli') || h.includes('vada') || h.includes('uttapam') || h.includes('paratha') || h.includes('roti') || h.includes('chapati') || h.includes('naan') || h.includes('bread')) return String.fromCodePoint(0x1FAD3); // 🫓
-    if (h.includes('egg') || h.includes('omelette'))       return String.fromCodePoint(0x1F373); // 🍳
-    if (h.includes('cake') || h.includes('pastry') || h.includes('brownie') || h.includes('muffin') || h.includes('cupcake')) return String.fromCodePoint(0x1F382); // 🎂
-    if (h.includes('biscuit') || h.includes('cookie') || h.includes('cracker')) return String.fromCodePoint(0x1F36A); // 🍪
-    if (h.includes('chocolate') || h.includes('choco')) return String.fromCodePoint(0x1F36B); // 🍫
-    if (h.includes('chips') || h.includes('fries') || h.includes('popcorn') || h.includes('crisps')) return String.fromCodePoint(0x1F35F); // 🍟
-    if (h.includes('samosa') || h.includes('pakoda') || h.includes('pakora') || h.includes('bhajia') || h.includes('vada pav')) return String.fromCodePoint(0x1F95F); // 🥟
-    if (h.includes('soup'))            return String.fromCodePoint(0x1F35C); // 🍜
-    if (h.includes('salad'))           return String.fromCodePoint(0x1F957); // 🥗
-    if (h.includes('ice cream') || h.includes('icecream') || h.includes('kulfi') || h.includes('gelato')) return String.fromCodePoint(0x1F366); // 🍦
-    if (h.includes('sweet') || h.includes('mithai') || h.includes('halwa') || h.includes('ladoo') || h.includes('barfi')) return String.fromCodePoint(0x1F36C); // 🍬
-    if (h.includes('peanut') || h.includes('nuts') || h.includes('cashew') || h.includes('almond')) return String.fromCodePoint(0x1F95C); // 🥜
-    if (h.includes('snack') || h.includes('namkeen') || h.includes('mixture')) return String.fromCodePoint(0x1F37F); // 🍿
-    if (h.includes('thali') || h.includes('meal') || h.includes('lunch') || h.includes('dinner')) return String.fromCodePoint(0x1F371); // 🍱
-    if (h.includes('milk') || h.includes('paneer') || h.includes('cheese') || h.includes('butter') || h.includes('ghee') || h.includes('dairy')) return String.fromCodePoint(0x1F9C8); // 🧈
-    if (h.includes('bakery') || h.includes('croissant') || h.includes('puff')) return String.fromCodePoint(0x1F950); // 🥐
-    if (h.includes('beverage') || h.includes('drink')) return String.fromCodePoint(0x1F964); // 🥤
-    if (h.includes('food') || h.includes('meal'))      return String.fromCodePoint(0x1F374); // 🍴
-    return String.fromCodePoint(0x1F6D2); // 🛒 default
+    if (h.includes('tea'))             return String.fromCodePoint(0x1F375);  // ??
+    if (h.includes('coffee') || h.includes('cappuccino') || h.includes('latte') || h.includes('espresso') || h.includes('mocha')) return String.fromCodePoint(0x2615); // ?
+    if (h.includes('juice') || h.includes('fresh juice') || h.includes('lemon') || h.includes('orange juice') || h.includes('mango juice')) return String.fromCodePoint(0x1F9C3); // ??
+    if (h.includes('lassi') || h.includes('buttermilk') || h.includes('chaas')) return String.fromCodePoint(0x1F95B); // ??
+    if (h.includes('milkshake') || h.includes('shake') || h.includes('smoothie')) return String.fromCodePoint(0x1F964); // ??
+    if (h.includes('cold drink') || h.includes('soda') || h.includes('cola') || h.includes('pepsi') || h.includes('sprite')) return String.fromCodePoint(0x1F964); // ??
+    if (h.includes('water'))           return String.fromCodePoint(0x1F4A7); // ??
+    if (h.includes('sandwich') || h.includes('burger') || h.includes('sub') || h.includes('wrap') || h.includes('roll')) return String.fromCodePoint(0x1F96A); // ??
+    if (h.includes('pizza'))           return String.fromCodePoint(0x1F355); // ??
+    if (h.includes('pasta') || h.includes('noodle') || h.includes('maggi')) return String.fromCodePoint(0x1F35D); // ??
+    if (h.includes('biryani') || h.includes('rice') || h.includes('pulao')) return String.fromCodePoint(0x1F35A); // ??
+    if (h.includes('dosa') || h.includes('idli') || h.includes('vada') || h.includes('uttapam') || h.includes('paratha') || h.includes('roti') || h.includes('chapati') || h.includes('naan') || h.includes('bread')) return String.fromCodePoint(0x1FAD3); // ??
+    if (h.includes('egg') || h.includes('omelette'))       return String.fromCodePoint(0x1F373); // ??
+    if (h.includes('cake') || h.includes('pastry') || h.includes('brownie') || h.includes('muffin') || h.includes('cupcake')) return String.fromCodePoint(0x1F382); // ??
+    if (h.includes('biscuit') || h.includes('cookie') || h.includes('cracker')) return String.fromCodePoint(0x1F36A); // ??
+    if (h.includes('chocolate') || h.includes('choco')) return String.fromCodePoint(0x1F36B); // ??
+    if (h.includes('chips') || h.includes('fries') || h.includes('popcorn') || h.includes('crisps')) return String.fromCodePoint(0x1F35F); // ??
+    if (h.includes('samosa') || h.includes('pakoda') || h.includes('pakora') || h.includes('bhajia') || h.includes('vada pav')) return String.fromCodePoint(0x1F95F); // ??
+    if (h.includes('soup'))            return String.fromCodePoint(0x1F35C); // ??
+    if (h.includes('salad'))           return String.fromCodePoint(0x1F957); // ??
+    if (h.includes('ice cream') || h.includes('icecream') || h.includes('kulfi') || h.includes('gelato')) return String.fromCodePoint(0x1F366); // ??
+    if (h.includes('sweet') || h.includes('mithai') || h.includes('halwa') || h.includes('ladoo') || h.includes('barfi')) return String.fromCodePoint(0x1F36C); // ??
+    if (h.includes('peanut') || h.includes('nuts') || h.includes('cashew') || h.includes('almond')) return String.fromCodePoint(0x1F95C); // ??
+    if (h.includes('snack') || h.includes('namkeen') || h.includes('mixture')) return String.fromCodePoint(0x1F37F); // ??
+    if (h.includes('thali') || h.includes('meal') || h.includes('lunch') || h.includes('dinner')) return String.fromCodePoint(0x1F371); // ??
+    if (h.includes('milk') || h.includes('paneer') || h.includes('cheese') || h.includes('butter') || h.includes('ghee') || h.includes('dairy')) return String.fromCodePoint(0x1F9C8); // ??
+    if (h.includes('bakery') || h.includes('croissant') || h.includes('puff')) return String.fromCodePoint(0x1F950); // ??
+    if (h.includes('beverage') || h.includes('drink')) return String.fromCodePoint(0x1F964); // ??
+    if (h.includes('food') || h.includes('meal'))      return String.fromCodePoint(0x1F374); // ??
+    return String.fromCodePoint(0x1F6D2); // ?? default
   };
 
   return (
     <div className="h-screen flex flex-col overflow-hidden print:bg-white" style={{ background: B.pageGrad }}>
 
-      {/* ── Header ── */}
+      {/* -- Header -- */}
       <header className="flex-shrink-0 px-4 py-2 shadow-lg print:hidden"
         style={{ background: B.bgGrad, borderBottom: `2px solid ${B.gold}` }}>
         <div className="flex items-center justify-between">
@@ -1038,10 +1038,10 @@ export default function Billing() {
       {/* Offline / pending-sync banner */}
       <OfflineBanner onSynced={() => fetchProducts()} />
 
-      {/* ── Body ── */}
+      {/* -- Body -- */}
       <div className="flex-1 flex overflow-hidden print:hidden">
 
-        {/* ── Category Sidebar ── */}
+        {/* -- Category Sidebar -- */}
         <aside className="w-40 flex-shrink-0 overflow-y-auto hidden lg:block"
           style={{ background: B.cream, borderRight: B.goldBorder }}>
           <div className="p-3">
@@ -1059,7 +1059,7 @@ export default function Billing() {
           </div>
         </aside>
 
-        {/* ── Products Area ── */}
+        {/* -- Products Area -- */}
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Search bar */}
           <div className="flex-shrink-0 px-4 py-3 print:hidden"
@@ -1112,7 +1112,7 @@ export default function Billing() {
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            {/* Suggestions while typing — ↑ ↓ to choose, Enter to add */}
+            {/* Suggestions while typing — ? ? to choose, Enter to add */}
             {suggestions.length > 0 && (
               <div className="mt-1.5 rounded-xl overflow-hidden shadow-lg" style={{ border: B.goldBorder, background: '#fff' }}>
                 {suggestions.map((p, i) => (
@@ -1126,7 +1126,7 @@ export default function Billing() {
                         style={{ background: '#fdf6e3', color: B.goldDark }}>{p.barcode}</span>}
                       <span className="font-semibold">{p.name}</span>
                     </span>
-                    <span className="font-bold text-xs flex-shrink-0 ml-2" style={{ color: B.goldDark }}>₹{fmt(p.selling_price)}</span>
+                    <span className="font-bold text-xs flex-shrink-0 ml-2" style={{ color: B.goldDark }}>?{fmt(p.selling_price)}</span>
                   </button>
                 ))}
               </div>
@@ -1148,7 +1148,7 @@ export default function Billing() {
                 {/* Big running total so the customer can get money ready */}
                 {cart.length > 0 && (
                   <span className="text-lg font-extrabold px-3 py-0.5 rounded-xl" style={{ background: B.bgGrad, color: B.goldLight }}>
-                    {cart.reduce((s, i) => s + i.quantity, 0)} items · ₹{Math.round(grandTotal)}
+                    {cart.reduce((s, i) => s + i.quantity, 0)} items · ?{Math.round(grandTotal)}
                   </span>
                 )}
               </div>
@@ -1215,7 +1215,7 @@ export default function Billing() {
                       <div className="p-2.5">
                         <p className="font-semibold text-sm leading-tight line-clamp-2" style={{ color: B.text }}>{product.name}</p>
                         {product.brand && <p className="text-xs mt-0.5" style={{ color: B.textLight }}>{product.brand}</p>}
-                        <p className="font-extrabold mt-1" style={{ color: B.goldDark }}>₹{fmt(product.selling_price)}</p>
+                        <p className="font-extrabold mt-1" style={{ color: B.goldDark }}>?{fmt(product.selling_price)}</p>
                         {outOfStock ? (
                           <span className="text-xs font-bold" style={{ color: '#dc2626' }}>Out of stock — selling anyway</span>
                         ) : lowStock && (
@@ -1230,14 +1230,14 @@ export default function Billing() {
           </div>
         </main>
 
-        {/* ── Cart Sidebar (desktop XL+) ── */}
+        {/* -- Cart Sidebar (desktop XL+) -- */}
         <aside className="w-80 flex-shrink-0 hidden xl:flex flex-col overflow-hidden"
           style={{ borderLeft: B.goldBorder }}>
           <CartPanel {...cartProps} />
         </aside>
       </div>
 
-      {/* ── Cart FAB (mobile/tablet) ── */}
+      {/* -- Cart FAB (mobile/tablet) -- */}
       <div className="xl:hidden fixed bottom-5 right-5 z-40 print:hidden">
         <button onClick={() => setShowMobileCart(true)}
           className="w-16 h-16 rounded-full shadow-xl flex items-center justify-center relative active:scale-95 transition-transform"
@@ -1254,7 +1254,7 @@ export default function Billing() {
         </button>
       </div>
 
-      {/* ── Mobile Cart Bottom Sheet ── */}
+      {/* -- Mobile Cart Bottom Sheet -- */}
       {showMobileCart && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end xl:hidden print:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowMobileCart(false)} />
@@ -1267,7 +1267,7 @@ export default function Billing() {
         </div>
       )}
 
-      {/* ── Modals ── */}
+      {/* -- Modals -- */}
       {showCheckout && <CheckoutModal cart={cart} onClose={() => setShowCheckout(false)} onSuccess={handleCheckoutSuccess} />}
       {showHeld      && <HeldBillsModal onClose={() => setShowHeld(false)} onRetrieve={handleRetrieveHeld} />}
       {showHoldName  && <HoldNameModal initialName={retrievedHoldName} isUpdate={!!retrievedHoldRef}
@@ -1275,7 +1275,7 @@ export default function Billing() {
       {showScanner   && <BarcodeScannerModal onScan={handleScanResult} onClose={() => setShowScanner(false)} />}
       {receiptData   && <Receipt sale={receiptData.sale} items={receiptData.items} onClose={() => setReceiptData(null)} quickKeys />}
 
-      {/* ── Keyboard shortcut list (F1 / ?) ── */}
+      {/* -- Keyboard shortcut list (F1 / ?) -- */}
       {showHelp && (
         <Modal title="Keyboard Shortcuts — Fast Billing" onClose={() => setShowHelp(false)} wide>
           <div className="grid sm:grid-cols-2 gap-4 text-sm">
@@ -1283,13 +1283,13 @@ export default function Billing() {
               ['Adding items', [
                 ['101  Enter', 'Add product with code / barcode 101 (text or numbers)'],
                 ['3*101  or  101*3', 'Add 3 of that product'],
-                ['tea  ↑ ↓  Enter', 'Search by name, pick from the list'],
+                ['tea  ? ?  Enter', 'Search by name, pick from the list'],
                 ['Scan barcode', 'Adds the product'],
                 ['Alt + 1 … 9', 'Quick-sale items (marked "Quick sale" on the product)'],
                 ['Alt + R', 'Repeat the last bill'],
               ]],
               ['Changing the cart (search box empty)', [
-                ['+  /  −', 'Quantity of the last item up / down'],
+                ['+  /  -', 'Quantity of the last item up / down'],
                 ['*5  Enter', 'Set the last item\u2019s quantity to 5'],
                 ['Delete', 'Remove the last item'],
                 ['Shift + Delete', 'Clear the whole cart'],

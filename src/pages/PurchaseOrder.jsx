@@ -48,7 +48,7 @@ export default function PurchaseOrder() {
   const loadData = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const [bRes, pRes, cRes, sRes] = await Promise.all([getBrands(), getProducts(), getCategories(), getSuppliers()]);
+      const [bRes, pRes, cRes, sRes] = await Promise.all([getBrands(), getProducts(), getCategories('product'), getSuppliers()]);
       setBrands(bRes.data.brands || []);
       setProducts(pRes.data.products || []);
       setCategories(cRes.data.categories || []);

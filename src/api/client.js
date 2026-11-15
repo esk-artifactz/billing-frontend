@@ -84,7 +84,9 @@ export const deleteProduct = (id) => api.delete(`/products/${id}`);
 
 // ── Categories ───────────────────────────────────────────────────────────
 
-export const getCategories = () => getWithCache('categories', () => api.get('/categories'));
+// type: 'product' (Products / billing) | 'raw_material' (Raw Material pages) | omitted = all (Categories page)
+export const getCategories = (type) =>
+  getWithCache(type ? `categories:${type}` : 'categories', () => api.get('/categories', { params: type ? { type } : {} }));
 
 export const createCategory = (data) => api.post('/categories', data);
 

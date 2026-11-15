@@ -143,59 +143,74 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Admin actions */}
-        {user?.role === 'Admin' && (
-          <ActionCard title="Admin Actions">
-            <div className="flex flex-wrap gap-3">
-              <NavBtn onClick={() => navigate('/users')} color="#5c3d9e">Manage Users</NavBtn>
-              <NavBtn onClick={() => navigate('/categories')} color="#7b3fa0">Manage Categories</NavBtn>
-              <NavBtn onClick={() => navigate('/products')} color="#1e6fa8">Manage Products</NavBtn>
-              <NavBtn onClick={() => navigate('/stock-alerts')} color="#c62828">Stock Alerts</NavBtn>
-              <NavBtn onClick={() => navigate('/attendance-report')} color="#0d6e4a">HR &amp; Salary Report</NavBtn>
-              <NavBtn onClick={() => navigate('/suppliers')} color="#7b3fa0">Manage Suppliers</NavBtn>
-              <NavBtn onClick={() => navigate('/purchase-order')} color="#b8500a">Create Purchase Order</NavBtn>
-              <NavBtn onClick={() => navigate('/receive-stock')} color="#1a6e3a">Receive Stock</NavBtn>
-              <NavBtn onClick={() => navigate('/daily-expenses')} color="#b45309">Daily Expenses</NavBtn>
-              <NavBtn onClick={() => navigate('/raw-material-stock')} color="#0d9488">Raw Material Stock</NavBtn>
-              <NavBtn onClick={() => navigate('/raw-materials')} color="#115e59">Raw Materials &amp; Usage</NavBtn>
-              <NavBtn onClick={() => navigate('/raw-material-purchase-list')} color="#b91c1c">Raw Material Purchase List</NavBtn>
-              <NavBtn onClick={() => navigate('/expense-categories')} color="#92400e">Expense Report</NavBtn>
-              <NavBtn onClick={() => navigate('/contacts')} color="#4f6d7a">Contact Book</NavBtn>
-              <NavBtn onClick={() => navigate('/sales-history')} color="#2d6a4f">Bill History</NavBtn>
-              <NavBtn onClick={() => navigate('/stock-valuation')} color="#0f766e">Stock Valuation</NavBtn>
-              <NavBtn onClick={() => navigate('/barcode-labels')} color="#7c3aed">Barcode / QR Labels</NavBtn>
-              <NavBtn onClick={() => navigate('/sales-return')} color="#dc2626">Sales Return</NavBtn>
-              <NavBtn onClick={() => navigate('/purchase-return')} color="#ea580c">Purchase Return</NavBtn>
-            </div>
-          </ActionCard>
-        )}
-
-        {/* Cashier quick actions */}
-        {user?.role === 'Cashier' && (
-          <ActionCard title="Quick Actions">
-            <div className="flex flex-wrap gap-3">
-              <NavBtn onClick={() => navigate('/categories')} color="#7b3fa0">View Categories</NavBtn>
-              <NavBtn onClick={() => navigate('/products')} color="#1e6fa8">View Products</NavBtn>
-              <NavBtn onClick={() => navigate('/stock-alerts')} color="#c62828">Stock Alerts</NavBtn>
-              <NavBtn onClick={() => navigate('/purchase-order')} color="#b8500a">Create Purchase Order</NavBtn>
-              <NavBtn onClick={() => navigate('/receive-stock')} color="#1a6e3a">Receive Stock</NavBtn>
-              <NavBtn onClick={() => navigate('/daily-expenses')} color="#b45309">Daily Expenses</NavBtn>
-              <NavBtn onClick={() => navigate('/raw-material-stock')} color="#0d9488">Raw Material Stock</NavBtn>
-              <NavBtn onClick={() => navigate('/raw-materials')} color="#115e59">Raw Materials &amp; Usage</NavBtn>
-              <NavBtn onClick={() => navigate('/raw-material-purchase-list')} color="#b91c1c">Raw Material Purchase List</NavBtn>
-              <NavBtn onClick={() => navigate('/suppliers')} color="#7b3fa0">Manage Suppliers</NavBtn>
-              <NavBtn onClick={() => navigate('/sales-return')} color="#dc2626">Sales Return</NavBtn>
-              <NavBtn onClick={() => navigate('/purchase-return')} color="#ea580c">Purchase Return</NavBtn>
-              <NavBtn onClick={() => navigate('/contacts')} color="#4f6d7a">Contact Book</NavBtn>
-              <NavBtn onClick={() => navigate('/sales-history')} color="#2d6a4f">Bill History</NavBtn>
-              <NavBtn onClick={() => navigate('/attendance')} color="#1a5276">Mark Attendance</NavBtn>
-            </div>
-          </ActionCard>
+        {/* Grouped menus — Admin sees everything, Cashier sees the non-admin items */}
+        {(user?.role === 'Admin' || user?.role === 'Cashier') && (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {MENU_GROUPS.map(g => {
+              const isAdmin = user?.role === 'Admin';
+              const links = g.items.filter(i => isAdmin || !i.adminOnly);
+              if (!links.length) return null;
+              return (
+                <ActionCard key={g.title} title={g.title}>
+                  <div className="flex flex-col gap-2">
+                    {links.map(i => (
+                      <NavBtn key={i.to} onClick={() => navigate(i.to)} color={g.color}>
+                        {!isAdmin && i.cashierLabel ? i.cashierLabel : i.label}
+                      </NavBtn>
+                    ))}
+                  </div>
+                </ActionCard>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
   );
 }
+
+// Dashboard menu groups (adminOnly items are hidden for Cashier)
+const MENU_GROUPS = [
+  { title: 'Sales', color: '#2d6a4f', items: [
+    { to: '/billing',      label: 'New Bill' },
+    { to: '/sales-history', label: 'Bill History' },
+    { to: '/sales-return', label: 'Sales Return' },
+    { to: '/credit-bills', label: 'Credit Bills' },
+    { to: '/contacts',     label: 'Contact Book' },
+  ] },
+  { title: 'Purchase', color: '#b8500a', items: [
+    { to: '/suppliers',      label: 'Manage Suppliers' },
+    { to: '/purchase-order', label: 'Create Purchase Order' },
+    { to: '/receive-stock',  label: 'Receive Stock' },
+    { to: '/purchase-return', label: 'Purchase Return' },
+  ] },
+  { title: 'Products & Stock', color: '#1e6fa8', items: [
+    { to: '/products',       label: 'Manage Products',   cashierLabel: 'View Products' },
+    { to: '/categories',     label: 'Manage Categories', cashierLabel: 'View Categories' },
+    { to: '/stock-alerts',   label: 'Stock Alerts' },
+    { to: '/barcode-labels', label: 'Barcode / QR Labels', adminOnly: true },
+  ] },
+  { title: 'Raw Materials', color: '#0d9488', items: [
+    { to: '/raw-material-stock',         label: 'Raw Material Stock' },
+    { to: '/raw-materials',              label: 'Raw Materials & Usage' },
+    { to: '/raw-material-purchase-list', label: 'Raw Material Purchase List' },
+  ] },
+  { title: 'Expenses', color: '#b45309', items: [
+    { to: '/daily-expenses', label: 'Daily Expenses' },
+  ] },
+  { title: 'Reports', color: '#7a4e08', items: [
+    { to: '/sales-report',       label: 'Sales Report',    adminOnly: true },
+    { to: '/expense-categories', label: 'Expense Report',  adminOnly: true },
+    { to: '/stock-valuation',    label: 'Stock Valuation', adminOnly: true },
+  ] },
+  { title: 'HR', color: '#1a5276', items: [
+    { to: '/attendance',        label: 'Mark Attendance' },
+    { to: '/attendance-report', label: 'HR & Salary Report', adminOnly: true },
+  ] },
+  { title: 'Users', color: '#5c3d9e', items: [
+    { to: '/users', label: 'Manage Users', adminOnly: true },
+  ] },
+];
 
 function InfoCard({ label, value, highlight }) {
   return (
@@ -226,7 +241,7 @@ function NavBtn({ onClick, color, children }) {
   return (
     <button
       onClick={onClick}
-      className="font-semibold px-5 py-2.5 rounded-xl text-sm transition-all active:scale-95 text-white shadow-sm"
+      className="font-semibold px-5 py-2.5 rounded-xl text-sm transition-all active:scale-95 text-white shadow-sm text-left hover:opacity-90"
       style={{ background: color }}
     >
       {children}

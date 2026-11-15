@@ -270,6 +270,8 @@ export default function AttendanceReport() {
   const [detailExpPay,   setDetailExpPay]   = useState([]);   // paid via daily_expenses
   const [detailAdvances, setDetailAdvances] = useState([]);
   const [detailSummary,  setDetailSummary]  = useState(null);
+  // Days breakdown popup (Present / Half Day / Leave) for one report row
+  const [daysRow, setDaysRow] = useState(null);
   const [detailLoading,  setDetailLoading]  = useState(false);
 
   // ── Toast ─────────────────────────────────────────────────────────────────
@@ -520,7 +522,6 @@ export default function AttendanceReport() {
   // ── Totals ────────────────────────────────────────────────────────────────
   const totalEarned  = report.reduce((s, r) => s + parseFloat(r.gross_earned || 0), 0);
   const totalPaid    = report.reduce((s, r) => s + parseFloat(r.total_paid || 0), 0);
-  const totalAdv     = report.reduce((s, r) => s + parseFloat(r.total_advance || 0), 0);
   const totalBalance = report.reduce((s, r) => s + parseFloat(r.balance_due || 0), 0);
   const totalOTPay   = report.reduce((s, r) => s + parseFloat(r.ot_pay || 0), 0);
   const totalBonus   = report.reduce((s, r) => s + parseFloat(r.bonus || 0), 0);
@@ -611,7 +612,7 @@ export default function AttendanceReport() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
-                        {['Employee','Designation','P','H','L','A','Eff. Days','Regular Pay','OT Pay','Total Earned','Bonus','Prev. Balance','Advances','Loan EMI','Paid','Balance','Actions'].map(h => (
+                        {['Employee','Days','Regular Pay','OT Pay','Total Earned','Bonus','Prev. Balance','Loan EMI','Paid','Balance','Actions'].map(h => (
                           <th key={h} className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wide"
                             style={{ color: B.goldLight }}>{h}</th>
                         ))}
@@ -624,37 +625,15 @@ export default function AttendanceReport() {
                             borderBottom: '1px solid #f0e0c0' }}>
                           <td className="px-3 py-3">
                             <div className="font-semibold" style={{ color: B.darkBrown }}>{row.full_name}</div>
-                            <div className="text-xs font-mono" style={{ color: '#a07020' }}>{row.emp_code}</div>
+                            <div className="text-xs" style={{ color: '#a07020' }}>{row.default_designation_name || row.role || '—'}</div>
                           </td>
-                          <td className="px-3 py-3 text-xs" style={{ color: B.brown }}>
-                            {row.default_designation_name || row.role || '—'}
-                          </td>
-                          <td className="px-3 py-3">
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                              style={{ background: STATUS_META.present.bg, color: STATUS_META.present.color }}>
-                              {row.present_days}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3">
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                              style={{ background: STATUS_META.half_day.bg, color: STATUS_META.half_day.color }}>
-                              {row.half_days}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3">
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                              style={{ background: STATUS_META.leave.bg, color: STATUS_META.leave.color }}>
-                              {row.leave_days}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3">
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                              style={{ background: STATUS_META.absent.bg, color: STATUS_META.absent.color }}>
-                              {row.absent_days}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3 font-semibold text-center" style={{ color: B.brown }}>
-                            {row.effective_days}
+                          {/* Days — click for Present / Half Day / Leave breakdown */}
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            <button onClick={() => setDaysRow(row)} title="View P / H / L details"
+                              className="text-xs font-bold underline decoration-dotted underline-offset-4"
+                              style={{ color: '#0369a1' }}>
+                              {row.effective_days} days
+                            </button>
                           </td>
                           <td className="px-3 py-3 font-semibold whitespace-nowrap" style={{ color: '#0369a1' }}>
                             {inr(row.base_earned ?? (parseFloat(row.gross_earned) - parseFloat(row.ot_pay || 0)))}
@@ -686,9 +665,6 @@ export default function AttendanceReport() {
                             title="Balance carried forward from previous months">
                             {row.previous_balance ? inr(row.previous_balance) : '—'}
                             {row.previous_balance < 0 && <span className="block text-xs font-normal">(overpaid)</span>}
-                          </td>
-                          <td className="px-3 py-3 font-semibold whitespace-nowrap" style={{ color: '#7c3aed' }}>
-                            {inr(row.total_advance)}
                           </td>
                           {/* Loan EMI deducted this month */}
                           <td className="px-3 py-3 font-semibold whitespace-nowrap"
@@ -725,14 +701,13 @@ export default function AttendanceReport() {
                     </tbody>
                     <tfoot>
                       <tr style={{ background: B.darkBrown }}>
-                        <td colSpan={7} className="px-3 py-2.5 text-xs font-bold uppercase"
+                        <td colSpan={2} className="px-3 py-2.5 text-xs font-bold uppercase"
                           style={{ color: B.goldLight }}>Totals</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#7dd3fc' }}>{inr(totalEarned - totalOTPay)}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#fbbf24' }}>{totalOTPay > 0 ? `+${inr(totalOTPay)}` : '—'}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: B.goldLight }}>{inr(totalEarned)}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#fcd34d' }}>{totalBonus > 0 ? `+${inr(totalBonus)}` : '—'}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: totalPrev > 0 ? '#fca5a5' : '#c4b5fd' }}>{totalPrev ? inr(totalPrev) : '—'}</td>
-                        <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#c4b5fd' }}>{inr(totalAdv)}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#fca5a5' }}>{totalEmi > 0 ? `−${inr(totalEmi)}` : '—'}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs" style={{ color: '#86efac' }}>{inr(totalPaid)}</td>
                         <td className="px-3 py-2.5 font-extrabold text-xs"
@@ -745,7 +720,7 @@ export default function AttendanceReport() {
               </div>
             )}
             <p className="text-xs px-1" style={{ color: '#a07020' }}>
-              P = Present · H = Half Day · L = Leave (unpaid) · A = Absent · Effective = P + H×0.5 ·
+              Days = Present + Half Day × 0.5 (click to see Present / Half Day / Leave) ·
               Total Earned = Regular Pay + OT Pay · Prev. Balance = pending (+) / overpaid (−) carried from earlier months ·
               Balance = Total Earned + Bonus + Prev. Balance − Advances − Loan EMI − Paid (carries into next month)
             </p>
@@ -1192,6 +1167,45 @@ export default function AttendanceReport() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ━━━━━━━━━ Days breakdown popup ━━━━━━━━━ */}
+      {daysRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(45,26,14,0.6)' }}
+          onClick={ev => { if (ev.target === ev.currentTarget) setDaysRow(null); }}>
+          <div className="w-full max-w-xs rounded-2xl shadow-2xl overflow-hidden" style={{ background: '#fff', border: `2px solid ${B.gold}` }}>
+            <div className="h-1" style={{ background: `linear-gradient(90deg,#b8860b,${B.goldLight},#b8860b)` }} />
+            <div className="px-5 pt-4 pb-2 flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-extrabold" style={{ color: B.brown }}>{daysRow.full_name}</h3>
+                <p className="text-xs" style={{ color: '#a07020' }}>{monthLabel(month)}</p>
+              </div>
+              <button onClick={() => setDaysRow(null)} autoFocus className="text-2xl font-bold leading-none" style={{ color: '#a07020' }}>×</button>
+            </div>
+            <div className="mx-5 rounded-xl overflow-hidden" style={{ border: '1px solid #e8d5a3' }}>
+              {[
+                ['present',  daysRow.present_days],
+                ['half_day', daysRow.half_days],
+                ['leave',    daysRow.leave_days],
+              ].map(([k, v]) => (
+                <div key={k} className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid #f0e0c0' }}>
+                  <span className="text-sm font-semibold" style={{ color: STATUS_META[k].color }}>{STATUS_META[k].label}</span>
+                  <span className="text-sm font-bold px-2.5 py-0.5 rounded-full" style={{ background: STATUS_META[k].bg, color: STATUS_META[k].color }}>{v}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between px-4 py-2.5" style={{ background: '#fff9ee' }}>
+                <span className="text-sm font-extrabold" style={{ color: B.brown }}>Paid Days</span>
+                <span className="text-sm font-extrabold" style={{ color: B.brown }}>{daysRow.effective_days}</span>
+              </div>
+            </div>
+            <p className="px-5 pt-2 text-xs" style={{ color: '#a07020' }}>Paid Days = Present + Half Day × 0.5</p>
+            <div className="p-5 pt-3">
+              <button onClick={() => { const r = daysRow; setDaysRow(null); openDetail(r); }}
+                className="w-full py-2.5 rounded-xl text-sm font-bold"
+                style={{ background: '#e0f2fe', color: '#0369a1' }}>View day-by-day</button>
             </div>
           </div>
         </div>

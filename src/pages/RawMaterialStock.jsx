@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   getRawMaterialStock, getRawMaterialPurchases, createRawMaterialPurchase,
   updateRawMaterialPurchase, deleteRawMaterialPurchase, updateRawMaterialItem,
-  getSuppliers, setRawMaterialSuppliers,
+  getSuppliers, setRawMaterialSuppliers, getCategories, getSubcategories,
 } from '../api/client';
 
 const B = {
@@ -201,6 +201,9 @@ export default function RawMaterialStock() {
     } catch (err) { if (!handleAuthErr(err)) showToast(err.response?.data?.detail || 'Delete failed.', false); }
   };
 
+  // ── Stock breakdown popup (Opening / Purchased / Used → In Stock) ──────────
+  const [stockDetail, setStockDetail] = useState(null);
+
   // ── Opening stock (first-time stock in hand; not a purchase / expense) ────
   const [openItem, setOpenItem] = useState(null);
   const [opQty, setOpQty]       = useState('');
@@ -251,6 +254,91 @@ export default function RawMaterialStock() {
       loadStock();
     } catch (err) { if (!handleAuthErr(err)) showToast(err.response?.data?.detail || 'Failed.', false); }
   };
+
+  // ── Category quick entry: pick a category → set Opening stock + Alert level for all its materials ──
+  const [cats, setCats]       = useState([]);
+  const [subcats, setSubcats] = useState([]);
+  useEffect(() => {
+    getCategories('raw_material').then(r => setCats(r.data.categories || [])).catch(() => {});
+    getSubcategories({ active: 1 }).then(r => setSubcats(r.data.subcategories || [])).catch(() => {});
+  }, []);
+  const UNCAT = '__none__';
+  const itemCatKey = (it) => {
+    if (it.category_id) return String(it.category_id);
+    const name = (it.category || '').split(' / ')[0].trim().toLowerCase();   // older items: match by name
+    const c = name && cats.find(x => x.name.trim().toLowerCase() === name);
+    return c ? String(c.id) : UNCAT;
+  };
+  const subName = (it) => subcats.find(s => s.id === it.subcategory_id)?.name
+    || ((it.category || '').includes(' / ') ? it.category.split(' / ').slice(1).join(' / ') : '');
+  const stockCats = [
+    ...cats.map(c => ({ key: String(c.id), name: c.name, n: items.filter(it => itemCatKey(it) === String(c.id)).length }))
+      .filter(c => c.n > 0).sort((a, b) => a.name.localeCompare(b.name)),
+    ...(items.some(it => itemCatKey(it) === UNCAT)
+      ? [{ key: UNCAT, name: 'Uncategorised', n: items.filter(it => itemCatKey(it) === UNCAT).length }] : []),
+  ];
+
+  const [stockCat, setStockCat] = useState('');
+  const [bulk, setBulk]         = useState({});            // id → { opening_qty, opening_rate, min_stock }
+  const [bulkDate, setBulkDate] = useState(today());
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const catRows = stockCat
+    ? items.filter(it => itemCatKey(it) === stockCat)
+        .sort((a, b) => subName(a).localeCompare(subName(b)) || a.name.localeCompare(b.name))
+    : [];
+  const initialBulk = (it) => ({
+    opening_qty:  parseFloat(it.opening_qty) > 0 ? String(parseFloat(it.opening_qty)) : '',
+    opening_rate: it.opening_rate != null ? String(parseFloat(it.opening_rate)) : '',
+    min_stock:    it.min_stock != null ? String(parseFloat(it.min_stock)) : '',
+  });
+  const changedRows = catRows.filter(it => {
+    const b = bulk[it.id]; if (!b) return false;
+    const o = initialBulk(it);
+    return b.opening_qty !== o.opening_qty || b.opening_rate !== o.opening_rate || b.min_stock !== o.min_stock;
+  });
+  const pickStockCat = (cat) => {
+    if (cat !== stockCat && changedRows.length &&
+        !window.confirm(`${changedRows.length} material(s) have unsaved changes. Switch category and discard them?`)) return;
+    setStockCat(cat);
+    const next = {};
+    items.filter(it => itemCatKey(it) === cat).forEach(it => { next[it.id] = initialBulk(it); });
+    setBulk(next);
+  };
+  const setBulkVal = (id, field, val) => setBulk(b => ({ ...b, [id]: { ...b[id], [field]: val } }));
+
+  const saveBulk = async (ev) => {
+    ev?.preventDefault();
+    if (!changedRows.length) { showToast('Nothing changed.', false); return; }
+    const bad = changedRows.find(it => ['opening_qty', 'opening_rate', 'min_stock'].some(f => {
+      const v = bulk[it.id][f]; return v !== '' && (isNaN(parseFloat(v)) || parseFloat(v) < 0);
+    }));
+    if (bad) { showToast(`Enter valid numbers for ${bad.name}.`, false); return; }
+    setBulkSaving(true);
+    let ok = 0;
+    for (const it of changedRows) {
+      const b = bulk[it.id], o = initialBulk(it);
+      const payload = {};
+      if (b.min_stock !== o.min_stock) payload.min_stock = b.min_stock === '' ? null : parseFloat(b.min_stock);
+      if (b.opening_qty !== o.opening_qty || b.opening_rate !== o.opening_rate) {
+        payload.opening_qty  = b.opening_qty === '' ? 0 : parseFloat(b.opening_qty);
+        payload.opening_rate = b.opening_rate === '' ? null : parseFloat(b.opening_rate);
+        payload.opening_date = bulkDate || null;
+      }
+      try { await updateRawMaterialItem(it.id, payload); ok++; }
+      catch (err) { if (handleAuthErr(err)) return; showToast(`${it.name}: ${err.response?.data?.detail || 'failed'}`, false); }
+    }
+    setBulkSaving(false);
+    if (ok) showToast(`Saved ${ok} material(s).`);
+    await loadStock();
+  };
+  // Refresh the editable values after the stock reloads (e.g. after saving)
+  useEffect(() => {
+    if (!stockCat) return;
+    const next = {};
+    (stock?.items || []).filter(it => itemCatKey(it) === stockCat).forEach(it => { next[it.id] = initialBulk(it); });
+    setBulk(next);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stock]);
 
   const inp = { borderColor: '#e8d5a3' };
 
@@ -339,6 +427,89 @@ export default function RawMaterialStock() {
 
         {/* ━━━━━━━━━━━━━━━━━━━━ Stock in hand ━━━━━━━━━━━━━━━━━━━━ */}
         {tab === 'stock' && (
+          <div className="space-y-4">
+          {/* Category bar — pick a category to set Opening stock + Alert level for all its materials */}
+          {items.length > 0 && (
+            <form onSubmit={saveBulk} className="rounded-2xl p-4 shadow-sm flex flex-wrap items-end gap-4"
+              style={{ background: '#fff', border: `1.5px solid ${stockCat ? B.gold : '#e8d5a3'}` }}>
+              <div className="min-w-[240px]">
+                <label className="text-xs font-bold mb-1 block" style={{ color: B.textLight }}>Category</label>
+                <select value={stockCat} onChange={e => pickStockCat(e.target.value)}
+                  className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none" style={{ borderColor: stockCat ? B.gold : '#e8d5a3' }}>
+                  <option value="">All materials (full stock view)</option>
+                  {stockCats.map(c => <option key={c.key} value={c.key}>{c.name} ({c.n} item{c.n !== 1 ? 's' : ''})</option>)}
+                </select>
+              </div>
+              {stockCat && (
+                <div>
+                  <label className="text-xs font-bold mb-1 block" style={{ color: B.textLight }}>Opening Stock Date</label>
+                  <input type="date" value={bulkDate} onChange={e => setBulkDate(e.target.value)}
+                    className="border-2 rounded-xl px-3 py-2 text-sm outline-none" style={inp} />
+                </div>
+              )}
+              {stockCat ? (
+                <div className="ml-auto flex items-center gap-3">
+                  <span className="text-xs" style={{ color: B.textLight }}>{changedRows.length} changed</span>
+                  <button type="submit" disabled={bulkSaving || !changedRows.length}
+                    className="text-sm font-bold px-6 py-2.5 rounded-xl active:scale-95 disabled:opacity-50"
+                    style={{ background: `linear-gradient(135deg,#b8860b,${B.gold},${B.goldLight})`, color: B.darkBrown }}>
+                    {bulkSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs self-center" style={{ color: B.textLight }}>
+                  Pick a category to quickly enter <strong>Opening stock</strong> and <strong>Alert levels</strong> for all its materials.
+                </p>
+              )}
+              {/* hidden submit so Enter in any box saves */}
+              <button type="submit" className="hidden" aria-hidden="true" tabIndex={-1} />
+            </form>
+          )}
+
+          {stockCat ? (
+            <div className="rounded-2xl shadow-sm overflow-hidden" style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
+                      {['Material', 'In Stock', 'Opening Qty', 'Opening Rate ₹', 'Alert Level'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: B.goldLight }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {catRows.map((it) => {
+                      const b = bulk[it.id] || initialBulk(it);
+                      const changed = changedRows.includes(it);
+                      const cell = (field, step, ph) => (
+                        <input type="number" min="0" step={step} value={b[field]} placeholder={ph}
+                          onChange={e => setBulkVal(it.id, field, e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveBulk(e); }}
+                          className="w-28 border-2 rounded-lg px-2 py-1.5 text-sm outline-none" style={inp} />
+                      );
+                      return (
+                        <tr key={it.id} style={{ borderBottom: '1px solid #f0e0c0', background: changed ? '#fefce8' : '#fff', opacity: it.active ? 1 : 0.5 }}>
+                          <td className="px-4 py-2 font-semibold" style={{ color: B.darkBrown }}>
+                            {it.name} <span className="text-xs font-normal text-gray-400">({it.unit})</span>
+                          </td>
+                          <td className="px-4 py-2 whitespace-nowrap">
+                            <span className="font-bold" style={{ color: it.low_stock ? '#dc2626' : '#16a34a' }}>{fmtQty(it.in_stock)} {it.unit}</span>
+                          </td>
+                          <td className="px-4 py-2 whitespace-nowrap">{cell('opening_qty', 'any', '0')} <span className="text-xs" style={{ color: B.textLight }}>{it.unit}</span></td>
+                          <td className="px-4 py-2">{cell('opening_rate', '0.01', it.last_rate ? String(parseFloat(it.last_rate)) : 'optional')}</td>
+                          <td className="px-4 py-2 whitespace-nowrap">{cell('min_stock', 'any', 'not set')} <span className="text-xs" style={{ color: B.textLight }}>{it.unit}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="px-4 py-2 text-xs" style={{ color: B.textLight }}>
+                Opening Qty = stock you already had when you started (not added to Daily Expenses). Alert Level = warn when stock falls to this.
+                Leave Alert Level empty to clear it. Only changed rows (highlighted) are saved.
+              </p>
+            </div>
+          ) : (
           <div className="rounded-2xl shadow-sm overflow-hidden" style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
             {stockLoad && !stock ? (
               <div className="flex justify-center py-16">
@@ -356,7 +527,7 @@ export default function RawMaterialStock() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
-                      {['Material', 'Suppliers', 'Opening', 'Purchased', 'Used', 'In Stock', 'Avg Rate', 'Last Rate', 'Stock Value', 'Alert Level'].map(h => (
+                      {['Material', 'In Stock', 'Avg Rate', 'Last Rate', 'Stock Value', 'Alert Level'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: B.goldLight }}>{h}</th>
                       ))}
                     </tr>
@@ -368,30 +539,13 @@ export default function RawMaterialStock() {
                           <div className="font-semibold" style={{ color: B.darkBrown }}>{it.name}</div>
                           {it.category && <div className="text-xs text-gray-400">{it.category}</div>}
                         </td>
-                        <td className="px-4 py-2.5 text-xs min-w-[150px]">
-                          {(it.suppliers || []).map(s => (
-                            <div key={s.id} className="whitespace-nowrap" style={{ color: B.darkBrown }}>
-                              {s.name}
-                              {s.last_rate != null && <span style={{ color: B.textLight }}> · {fmtINR(s.last_rate)}</span>}
-                            </div>
-                          ))}
-                          <button onClick={() => openLink(it)} className="mt-0.5 font-bold underline" style={{ color: B.gold }}>
-                            {(it.suppliers || []).length ? 'Edit' : '+ Link supplier'}
-                          </button>
-                        </td>
-                        {/* Opening stock in hand — first-time setup */}
-                        <td className="px-4 py-2.5 whitespace-nowrap text-xs">
-                          {parseFloat(it.opening_qty) > 0 && (
-                            <div className="font-semibold text-sm" style={{ color: B.darkBrown }}>{fmtQty(it.opening_qty)} {it.unit}</div>
-                          )}
-                          <button onClick={() => openOpening(it)} className="font-bold underline" style={{ color: B.gold }}>
-                            {parseFloat(it.opening_qty) > 0 ? 'Edit' : '+ Set'}
-                          </button>
-                        </td>
-                        <td className="px-4 py-2.5 whitespace-nowrap">{fmtQty(it.purchased)} {it.unit}</td>
-                        <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: B.textLight }}>{fmtQty(it.consumed)} {it.unit}</td>
+                        {/* In stock — click for Opening / Purchased / Used breakdown */}
                         <td className="px-4 py-2.5 whitespace-nowrap">
-                          <span className="font-extrabold" style={{ color: it.low_stock ? '#dc2626' : '#16a34a' }}>{fmtQty(it.in_stock)} {it.unit}</span>
+                          <button onClick={() => setStockDetail(it)} title="Show Opening / Purchased / Used"
+                            className="font-extrabold underline decoration-dotted underline-offset-4"
+                            style={{ color: it.low_stock ? '#dc2626' : '#16a34a' }}>
+                            {fmtQty(it.in_stock)} {it.unit}
+                          </button>
                           {it.low_stock && it.active && (
                             <span className="ml-2 text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: '#fee2e2', color: '#dc2626' }}>
                               {it.in_stock <= 0 ? 'Out' : 'Low'}
@@ -414,18 +568,20 @@ export default function RawMaterialStock() {
                   </tbody>
                   <tfoot>
                     <tr style={{ background: '#fff9ee', borderTop: `2px solid ${B.gold}` }}>
-                      <td colSpan={8} className="px-4 py-3 text-right text-sm font-bold" style={{ color: B.text }}>Total stock value</td>
+                      <td colSpan={4} className="px-4 py-3 text-right text-sm font-bold" style={{ color: B.text }}>Total stock value</td>
                       <td className="px-4 py-3 font-extrabold" style={{ color: B.brown }}>{fmtINR(stock?.total_value)}</td>
                       <td />
                     </tr>
                   </tfoot>
                 </table>
                 <p className="px-4 py-2 text-xs" style={{ color: B.textLight }}>
-                  In Stock = Opening + Purchased − Used (usage is recorded on the Materials &amp; Usage page). Stock value uses the average rate.
-                  Use <strong>Opening → + Set</strong> to enter the stock you already have when you start — it is not added to Daily Expenses.
+                  In Stock = Opening + Purchased − Used — click the <strong>In Stock</strong> figure to see the breakdown and set opening stock
+                  (stock you already had when you started; not added to Daily Expenses). Stock value uses the average rate.
                 </p>
               </div>
             )}
+          </div>
+          )}
           </div>
         )}
 
@@ -718,6 +874,78 @@ export default function RawMaterialStock() {
           </>
         )}
       </div>
+
+      {/* Stock breakdown popup */}
+      {stockDetail && (() => {
+        const it = items.find(x => x.id === stockDetail.id) || stockDetail;   // fresh values after reload
+        const hasOpening = parseFloat(it.opening_qty) > 0;
+        const row = (label, val, color, extra) => (
+          <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid #f0e0c0' }}>
+            <div>
+              <span className="text-sm font-semibold" style={{ color: B.text }}>{label}</span>
+              {extra && <div className="text-xs" style={{ color: B.textLight }}>{extra}</div>}
+            </div>
+            <span className="font-bold whitespace-nowrap" style={{ color }}>{val}</span>
+          </div>
+        );
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(45,26,14,0.6)' }}
+            onClick={ev => { if (ev.target === ev.currentTarget) setStockDetail(null); }}
+            onKeyDown={ev => { if (ev.key === 'Escape') setStockDetail(null); }}>
+            <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden" style={{ background: '#fff', border: `2px solid ${B.gold}` }}>
+              <div className="h-1" style={{ background: `linear-gradient(90deg,#b8860b,${B.goldLight},#b8860b)` }} />
+              <div className="px-5 pt-4 pb-3 flex items-start justify-between">
+                <div>
+                  <h3 className="text-lg font-extrabold" style={{ color: B.brown }}>{it.name}</h3>
+                  {it.category && <p className="text-xs" style={{ color: B.textLight }}>{it.category}</p>}
+                </div>
+                <button onClick={() => setStockDetail(null)} autoFocus className="text-2xl font-bold leading-none" style={{ color: B.textLight }}>×</button>
+              </div>
+              <div className="mx-5 rounded-xl overflow-hidden" style={{ border: '1px solid #e8d5a3' }}>
+                {row('Opening stock', `${fmtQty(it.opening_qty)} ${it.unit}`, B.darkBrown,
+                  hasOpening
+                    ? [it.opening_date && `as on ${String(it.opening_date).slice(0, 10)}`, it.opening_rate != null && `@ ${fmtINR(it.opening_rate)}`].filter(Boolean).join(' ')
+                    : 'not set')}
+                {row('+ Purchased', `${fmtQty(it.purchased)} ${it.unit}`, '#16a34a',
+                  parseFloat(it.purchase_value) > 0 ? `worth ${fmtINR(it.purchase_value)}` : null)}
+                {row('− Used', `${fmtQty(it.consumed)} ${it.unit}`, '#dc2626', 'recorded in Daily Consumption')}
+                <div className="flex items-center justify-between px-4 py-3" style={{ background: '#fff9ee' }}>
+                  <span className="text-sm font-extrabold" style={{ color: B.brown }}>= In Stock</span>
+                  <span className="text-lg font-extrabold" style={{ color: it.low_stock ? '#dc2626' : '#16a34a' }}>
+                    {fmtQty(it.in_stock)} {it.unit}
+                    {it.low_stock && it.active && (
+                      <span className="ml-2 text-xs font-bold px-2 py-0.5 rounded-full align-middle" style={{ background: '#fee2e2', color: '#dc2626' }}>
+                        {it.in_stock <= 0 ? 'Out' : 'Low'}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
+              <p className="px-5 pt-2 text-xs" style={{ color: B.textLight }}>
+                Alert level: {it.min_stock != null ? `${fmtQty(it.min_stock)} ${it.unit}` : 'not set'} · Stock value: {fmtINR(it.stock_value)}
+              </p>
+              <div className="p-5 flex gap-2">
+                <button onClick={() => { setStockDetail(null); openOpening(it); }}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold"
+                  style={{ background: `linear-gradient(135deg,#b8860b,${B.gold},${B.goldLight})`, color: B.darkBrown }}>
+                  {hasOpening ? 'Edit Opening Stock' : '+ Set Opening Stock'}
+                </button>
+                <button onClick={() => navigate('/raw-materials')}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold"
+                  style={{ background: '#fff9ee', border: '1px solid #e8d5a3', color: B.text }}>
+                  Record Usage
+                </button>
+              </div>
+              <div className="px-5 pb-4 -mt-2 text-center">
+                <button onClick={() => { setStockDetail(null); openLink(it); }}
+                  className="text-xs font-bold underline" style={{ color: B.gold }}>
+                  {(it.suppliers || []).length ? `Suppliers (${it.suppliers.length}) — edit` : '+ Link supplier'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Opening stock in hand */}
       {openItem && (

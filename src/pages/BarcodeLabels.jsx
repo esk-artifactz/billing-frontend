@@ -99,7 +99,7 @@ export default function BarcodeLabels() {
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const [pRes, cRes] = await Promise.all([getProducts(), getCategories()]);
+      const [pRes, cRes] = await Promise.all([getProducts(), getCategories('product')]);
       setProducts(pRes.data.products || []);
       setCategories(cRes.data.categories || []);
     } catch (err) {

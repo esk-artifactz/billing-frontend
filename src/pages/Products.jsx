@@ -92,7 +92,7 @@ export default function Products() {
   }, [navigate, signOut]);
 
   const fetchCategories = useCallback(async () => {
-    try { const res = await getCategories(); setCategories(res.data.categories || []); }
+    try { const res = await getCategories('product'); setCategories(res.data.categories || []); }
     catch { /* silent */ }
   }, []);
 
@@ -279,7 +279,7 @@ export default function Products() {
               <table className="w-full text-sm" style={{ minWidth: 900 }}>
                 <thead>
                   <tr style={{ background: B.bgGrad }}>
-                    {['#','Name','Category','Brand','Supplier','Unit','Purchase','MRP','Selling','GST%','Track','Stock','Min','Expiry','Active','Actions'].map(h => (
+                    {['#','Name','Barcode','Category','Purchase','MRP','Selling','GST%','Stock','Min','Expiry','Active','Actions'].map(h => (
                       <th key={h} className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
                         style={{ color: B.goldLight }}>
                         {h}
@@ -292,24 +292,15 @@ export default function Products() {
                     <tr key={p.id} className="transition-colors"
                       style={{ background: idx % 2 === 0 ? '#fff9ee' : '#fffef8', borderTop: '1px solid #e8d5a3' }}>
                       <td className="px-3 py-2.5" style={{ color: B.textLight }}>{idx + 1}</td>
-                      <td className="px-3 py-2.5 font-bold max-w-[140px] truncate" style={{ color: B.text }} title={p.name}>{p.name}</td>
+                      <td className="px-3 py-2.5 font-bold max-w-[160px] truncate" style={{ color: B.text }} title={p.name}>{p.name}</td>
+                      <td className="px-3 py-2.5 font-mono text-xs whitespace-nowrap" style={{ color: p.barcode ? B.text : '#bbb' }}>{p.barcode || '—'}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: B.textLight }}>
                         {getCatName(p.category_id)}{p.subcategory ? <span style={{ color: '#bbb' }}> / {p.subcategory}</span> : ''}
                       </td>
-                      <td className="px-3 py-2.5" style={{ color: B.textLight }}>{p.brand || '—'}</td>
-                      <td className="px-3 py-2.5 text-xs" style={{ color: B.textLight }}>
-                        {suppliers.find(s => s.id === p.supplier_id)?.name || '—'}
-                      </td>
-                      <td className="px-3 py-2.5" style={{ color: B.textLight }}>{p.unit}</td>
                       <td className="px-3 py-2.5 font-medium" style={{ color: B.text }}>₹{parseFloat(p.purchase_price).toFixed(2)}</td>
                       <td className="px-3 py-2.5 font-medium" style={{ color: B.text }}>₹{parseFloat(p.mrp).toFixed(2)}</td>
                       <td className="px-3 py-2.5 font-bold" style={{ color: B.goldDark }}>₹{parseFloat(p.selling_price).toFixed(2)}</td>
                       <td className="px-3 py-2.5" style={{ color: B.textLight }}>{parseFloat(p.gst_percentage).toFixed(1)}%</td>
-                      <td className="px-3 py-2.5">
-                        {p.track_stock
-                          ? <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ background: '#e8f5e9', color: '#2e7d32' }}>Yes</span>
-                          : <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ background: '#f5f5f5', color: '#777' }}>No</span>}
-                      </td>
                       <td className="px-3 py-2.5" style={{ color: B.textLight }}>
                         {p.track_stock && p.current_stock != null ? parseFloat(p.current_stock).toFixed(2) : '—'}
                       </td>
