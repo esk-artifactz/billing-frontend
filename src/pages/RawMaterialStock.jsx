@@ -264,7 +264,7 @@ export default function RawMaterialStock() {
   }, []);
   const UNCAT = '__none__';
   const itemCatKey = (it) => {
-    if (it.category_id) return String(it.category_id);
+    if (it.category_id) return cats.some(c => c.id === it.category_id) ? String(it.category_id) : UNCAT;
     const name = (it.category || '').split(' / ')[0].trim().toLowerCase();   // older items: match by name
     const c = name && cats.find(x => x.name.trim().toLowerCase() === name);
     return c ? String(c.id) : UNCAT;

@@ -35,13 +35,22 @@ const inputCls = {
   outline: 'none',
 };
 
-const EMPTY_FORM = { name: '', description: '', active: true };
+const EMPTY_FORM = { name: '', description: '', active: true, category_type: 'product', show_on_menu: true, menu_note: '' };
+
+// Product categories show on Products / Billing; Raw Material categories only on Raw Material pages
+const TYPE_TABS = [
+  { key: 'product',      label: 'Product Categories',      hint: 'Used for products sold in billing. Choose which ones show on the public Menu card and add a Menu Note (e.g. "Add Ice Cream +₹15").' },
+  { key: 'raw_material', label: 'Raw Material Categories', hint: 'Used only for raw materials (not shown on Products)' },
+];
+const typeOf = (c) => c.category_type || 'product';
 
 export default function Categories() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
-  const [categories, setCategories] = useState([]);
+  const [allCats, setCategories]    = useState([]);
+  const [ctype, setCtype]           = useState('product');   // which tab is shown
+  const categories = allCats.filter(c => typeOf(c) === ctype);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState('');
   const [modal, setModal]           = useState(null);
@@ -103,8 +112,8 @@ export default function Categories() {
     runSub(() => deleteSubcategory(s.id));
   };
 
-  const openAdd  = () => { setForm(EMPTY_FORM); setFormError(''); setModal('add'); };
-  const openEdit = (cat) => { setSelected(cat); setForm({ name: cat.name || '', description: cat.description || '', active: cat.active !== undefined ? cat.active : true }); setFormError(''); setModal('edit'); };
+  const openAdd  = () => { setForm({ ...EMPTY_FORM, category_type: ctype }); setFormError(''); setModal('add'); };
+  const openEdit = (cat) => { setSelected(cat); setForm({ name: cat.name || '', description: cat.description || '', active: cat.active !== undefined ? cat.active : true, category_type: typeOf(cat), show_on_menu: cat.show_on_menu !== false, menu_note: cat.menu_note || '' }); setFormError(''); setModal('edit'); };
   const closeModal = () => { setModal(null); setSelected(null); };
   useEscClose(closeModal, !!modal);
 
@@ -115,7 +124,7 @@ export default function Categories() {
 
   const handleAdd = async (e) => {
     e.preventDefault(); setSaving(true); setFormError('');
-    try { await createCategory(form); closeModal(); fetchCategories(); }
+    try { await createCategory(form); closeModal(); setCtype(form.category_type); fetchCategories(); }
     catch (err) { setFormError(err.response?.data?.detail || 'Failed to add category.'); }
     finally { setSaving(false); }
   };
@@ -177,14 +186,31 @@ export default function Categories() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-extrabold" style={{ color: B.text, fontFamily: 'Georgia, serif' }}>Categories</h2>
-            <p className="text-sm mt-0.5" style={{ color: B.textLight }}>{categories.length} categor{categories.length === 1 ? 'y' : 'ies'} found</p>
+            <p className="text-sm mt-0.5" style={{ color: B.textLight }}>{allCats.length} categor{allCats.length === 1 ? 'y' : 'ies'} in total</p>
           </div>
           <button onClick={openAdd}
             className="font-bold px-5 py-2.5 rounded-xl text-sm active:scale-95 transition-all shadow-md"
             style={{ background: B.goldGrad, color: B.brown }}>
-            + Add Category
+            + Add {ctype === 'raw_material' ? 'Raw Material' : 'Product'} Category
           </button>
         </div>
+
+        {/* Product / Raw Material tabs */}
+        <div className="flex gap-2 flex-wrap">
+          {TYPE_TABS.map(t => {
+            const n = allCats.filter(c => typeOf(c) === t.key).length;
+            const on = ctype === t.key;
+            return (
+              <button key={t.key} onClick={() => { setCtype(t.key); setOpenCatId(null); }} title={t.hint}
+                className="px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95"
+                style={on ? { background: B.bgGrad, color: B.goldLight, border: `1.5px solid ${B.gold}` }
+                          : { background: '#fff9ee', color: B.text, border: '1.5px solid #e8d5a3' }}>
+                {t.label} <span className="ml-1 text-xs opacity-80">({n})</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs -mt-2" style={{ color: B.textLight }}>{TYPE_TABS.find(t => t.key === ctype).hint}</p>
 
         {error && (
           <div className="rounded-xl px-4 py-3 text-sm font-medium" style={{ background: '#fff0f0', border: '1px solid #e57373', color: '#c62828' }}>
@@ -224,7 +250,15 @@ export default function Categories() {
                       className="transition-colors"
                       style={{ background: open ? '#fff3d6' : idx % 2 === 0 ? '#fff9ee' : '#fffef8', borderTop: '1px solid #e8d5a3' }}>
                       <td className="px-5 py-3 text-sm" style={{ color: B.textLight }}>{idx + 1}</td>
-                      <td className="px-5 py-3 text-sm font-bold" style={{ color: B.text }}>{cat.name}</td>
+                      <td className="px-5 py-3 text-sm font-bold" style={{ color: B.text }}>
+                        {cat.name}
+                        {ctype === 'product' && cat.show_on_menu === false && (
+                          <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-bold" style={{ background: '#f3f4f6', color: '#6b7280' }}>Hidden from Menu</span>
+                        )}
+                        {ctype === 'product' && cat.menu_note && (
+                          <div className="text-xs font-normal mt-0.5 whitespace-pre-line" style={{ color: '#b45309' }}>Menu note: {cat.menu_note}</div>
+                        )}
+                      </td>
                       <td className="px-5 py-3 text-sm" style={{ color: B.textLight }}>{cat.description || '—'}</td>
                       <td className="px-5 py-3 text-sm">
                         <button onClick={() => toggleSubs(cat.id)}
@@ -326,12 +360,12 @@ export default function Categories() {
       {/* Modal */}
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+          <div className="rounded-2xl shadow-2xl w-full max-w-md overflow-y-auto max-h-[92vh]"
             style={{ background: B.pageGrad, border: B.goldBorder }}>
             <div className="h-1.5" style={{ background: B.goldGrad }} />
             <div className="px-6 py-4" style={{ background: B.bgGrad, borderBottom: B.goldBorder }}>
               <h3 className="text-lg font-bold" style={{ color: B.goldLight, fontFamily: 'Georgia, serif' }}>
-                {modal === 'add' ? 'Add New Category' : 'Edit Category'}
+                {modal === 'add' ? `Add ${form.category_type === 'raw_material' ? 'Raw Material' : 'Product'} Category` : 'Edit Category'}
               </h3>
             </div>
 
@@ -343,6 +377,21 @@ export default function Categories() {
             )}
 
             <form onSubmit={modal === 'add' ? handleAdd : handleUpdate} className="p-5 space-y-4">
+              {/* Type — Product (Products / billing) or Raw Material (Raw Material pages only) */}
+              <div>
+                <label className="block text-sm font-bold mb-1.5" style={{ color: B.text }}>Category Type *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {TYPE_TABS.map(t => (
+                    <button key={t.key} type="button" onClick={() => setForm(f => ({ ...f, category_type: t.key }))}
+                      className="py-2 rounded-lg text-xs font-bold active:scale-95"
+                      style={form.category_type === t.key
+                        ? { background: B.goldGrad, color: B.brown, border: `2px solid ${B.goldDark}` }
+                        : { background: '#fff9ee', color: B.text, border: '2px solid #e8d5a3' }}>
+                      {t.key === 'product' ? 'Product' : 'Raw Material'}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div>
                 <label className="block text-sm font-bold mb-1.5" style={{ color: B.text }}>Category Name *</label>
                 <input type="text" name="name" value={form.name} onChange={handleChange}
@@ -363,6 +412,29 @@ export default function Categories() {
                 </div>
                 <span className="text-sm font-semibold" style={{ color: B.text }}>Active</span>
               </label>
+
+              {/* Public Menu card settings — product categories only */}
+              {form.category_type === 'product' && (
+                <div className="rounded-xl p-3 space-y-3" style={{ background: '#fff9ee', border: '1.5px dashed #d4a017' }}>
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <div onClick={() => setForm(f => ({ ...f, show_on_menu: !f.show_on_menu }))}
+                      className="w-11 h-6 rounded-full flex items-center transition-all px-0.5 flex-shrink-0"
+                      style={{ background: form.show_on_menu ? B.goldGrad : '#d0c8b8' }}>
+                      <div className="w-5 h-5 rounded-full bg-white shadow transition-all"
+                        style={{ transform: form.show_on_menu ? 'translateX(20px)' : 'translateX(0)' }} />
+                    </div>
+                    <span className="text-sm font-semibold" style={{ color: B.text }}>Show on Menu card</span>
+                  </label>
+                  <div>
+                    <label className="block text-sm font-bold mb-1.5" style={{ color: B.text }}>
+                      Menu Note <span className="font-normal text-xs" style={{ color: B.textLight }}>(shown under this category on the Menu)</span>
+                    </label>
+                    <textarea name="menu_note" value={form.menu_note} onChange={handleChange} rows="2" maxLength={500}
+                      placeholder="e.g., Add Ice Cream +₹15 · Extra Cheese +₹10"
+                      style={{ ...inputCls, resize: 'vertical' }} />
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={closeModal}

@@ -150,6 +150,12 @@ export default function Menu() {
                     style={{ color: B.brown, fontFamily: 'Georgia, serif' }}>{cat.name}</h2>
                   <div className="h-px flex-1" style={{ background: `linear-gradient(90deg,${B.gold},transparent)` }} />
                 </div>
+                {/* Category note, e.g. "Add Ice Cream +₹15" (set on the Categories page) */}
+                {cat.menu_note && (
+                  <p className="text-center text-sm italic font-semibold -mt-2 mb-3 whitespace-pre-line" style={{ color: B.goldDark }}>
+                    {cat.menu_note}
+                  </p>
+                )}
                 <div className="space-y-1">
                   {cat.items.map(item => (
                     <div key={item.id} className="flex items-center gap-3 rounded-xl px-4 py-3"

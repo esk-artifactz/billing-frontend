@@ -162,7 +162,7 @@ export default function RawMaterials() {
   const UNCAT = '__none__';
   // Main category of an item (legacy items only have the "Category / Sub" text)
   const itemCatKey = (it) => {
-    if (it.category_id) return String(it.category_id);
+    if (it.category_id) return cats.some(c => c.id === it.category_id) ? String(it.category_id) : UNCAT;
     const name = (it.category || '').split(' / ')[0].trim().toLowerCase();
     const c = name && cats.find(x => x.name.trim().toLowerCase() === name);
     return c ? String(c.id) : UNCAT;

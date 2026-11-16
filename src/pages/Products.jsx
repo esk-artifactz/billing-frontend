@@ -38,7 +38,7 @@ const EMPTY_FORM = {
   name: '', barcode: '', brand: '', category_id: '', subcategory: '',
   unit: 'pcs', purchase_price: '', mrp: '', selling_price: '', gst_percentage: '',
   track_stock: true, current_stock: '', minimum_stock_level: '',
-  quick_sale_enabled: false, active: true,
+  quick_sale_enabled: false, active: true, show_on_menu: true,
   supplier_id: '', mfg_date: '', expiry_date: '', fssai_no: '',
 };
 
@@ -123,6 +123,7 @@ export default function Products() {
       current_stock: p.current_stock ?? '', minimum_stock_level: p.minimum_stock_level ?? '',
       quick_sale_enabled: p.quick_sale_enabled || false,
       active: p.active !== undefined ? p.active : true,
+      show_on_menu: p.show_on_menu !== false,
       supplier_id: p.supplier_id || '',
       mfg_date: p.mfg_date?.slice(0, 10) || '',
       expiry_date: p.expiry_date?.slice(0, 10) || '',
@@ -481,6 +482,8 @@ export default function Products() {
                       onChange={() => setForm(f => ({ ...f, quick_sale_enabled: !f.quick_sale_enabled }))} />
                     <Toggle checked={form.active} label="Active"
                       onChange={() => setForm(f => ({ ...f, active: !f.active }))} />
+                    <Toggle checked={form.show_on_menu} label="Show on Menu"
+                      onChange={() => setForm(f => ({ ...f, show_on_menu: !f.show_on_menu }))} />
                   </div>
                   {form.track_stock && (
                     <div className="grid grid-cols-2 gap-4">

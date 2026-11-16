@@ -129,7 +129,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
     // Cash with the tendered box left empty = exact amount
     const cashGiven = paymentMethod === 'cash' && amountTendered === '' ? grandTotal : tendered;
     if (paymentMethod === 'cash' && cashGiven < grandTotal) { setError('Amount tendered must be = grand total'); return; }
-    if (paymentMethod === 'split' && !spValid) { setError(`Split amounts must add up to ?${fmt(grandTotal)}`); return; }
+    if (paymentMethod === 'split' && !spValid) { setError(`Split amounts must add up to ₹${fmt(grandTotal)}`); return; }
     setLoading(true); setError('');
     try {
       const payload = {
@@ -201,14 +201,14 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
 
         {/* Order summary */}
         <div className="rounded-xl p-4 space-y-2 text-sm" style={{ background: '#fff9ee', border: B.goldBorder }}>
-          <div className="flex justify-between" style={{ color: B.textLight }}><span>Subtotal</span><span>?{fmt(subtotal)}</span></div>
-          {discountVal > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-?{fmt(discountVal)}</span></div>}
-          {taxTotal    > 0 && <div className="flex justify-between" style={{ color: B.textLight }}><span>GST</span><span>+?{fmt(taxTotal)}</span></div>}
-          {parcelVal   > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Parcel Charge</span><span>+?{fmt(parcelVal)}</span></div>}
-          {otherVal    > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Other Things{otherDesc.trim() ? ` (${otherDesc.trim()})` : ''}</span><span>+?{fmt(otherVal)}</span></div>}
-          {roundOff   !== 0 && <div className="flex justify-between text-xs" style={{ color: '#aaa' }}><span>Round Off</span><span>?{fmt(roundOff)}</span></div>}
+          <div className="flex justify-between" style={{ color: B.textLight }}><span>Subtotal</span><span>₹{fmt(subtotal)}</span></div>
+          {discountVal > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-₹{fmt(discountVal)}</span></div>}
+          {taxTotal    > 0 && <div className="flex justify-between" style={{ color: B.textLight }}><span>GST</span><span>+₹{fmt(taxTotal)}</span></div>}
+          {parcelVal   > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Parcel Charge</span><span>+₹{fmt(parcelVal)}</span></div>}
+          {otherVal    > 0 && <div className="flex justify-between" style={{ color: '#b45309' }}><span>Other Things{otherDesc.trim() ? ` (${otherDesc.trim()})` : ''}</span><span>+₹{fmt(otherVal)}</span></div>}
+          {roundOff   !== 0 && <div className="flex justify-between text-xs" style={{ color: '#aaa' }}><span>Round Off</span><span>₹{fmt(roundOff)}</span></div>}
           <div className="flex justify-between font-bold text-lg border-t pt-2" style={{ borderColor: B.gold, color: B.text }}>
-            <span>Total</span><span style={{ color: B.goldDark }}>?{fmt(grandTotal)}</span>
+            <span>Total</span><span style={{ color: B.goldDark }}>₹{fmt(grandTotal)}</span>
           </div>
         </div>
 
@@ -216,7 +216,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         <div className="flex gap-2">
           {showDiscount || discountVal > 0 ? (
             <div className="flex-1">
-              <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Discount (?)</label>
+              <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Discount (₹)</label>
               <input ref={discountRef} type="number" value={discount} onChange={e => setDiscount(e.target.value)}
                 placeholder="0.00" min="0" style={inputStyle} />
             </div>
@@ -229,7 +229,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
           )}
           {showParcel || parcelVal > 0 ? (
             <div className="flex-1">
-              <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Parcel Charge (?)</label>
+              <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>Parcel Charge (₹)</label>
               <input ref={parcelRef} type="number" value={parcel} onChange={e => setParcel(e.target.value)}
                 placeholder="0.00" min="0" style={inputStyle} autoFocus />
             </div>
@@ -245,7 +245,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         {/* Other Things — items not in the product list, added as one amount */}
         <div>
           <label className="block text-xs font-semibold mb-1" style={{ color: B.text }}>
-            Other Things (?) <span className="font-normal opacity-70">(O)</span>
+            Other Things (₹) <span className="font-normal opacity-70">(O)</span>
           </label>
           <div className="grid grid-cols-2 gap-2">
             <input type="text" value={otherDesc} onChange={e => setOtherDesc(e.target.value)}
@@ -281,9 +281,9 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
               Split Bill — Cash + UPI / Card
             </p>
             {[
-              { key: 'cash', label: 'Cash (?)',        val: splitCash, color: '#16a34a' },
-              { key: 'upi',  label: 'UPI (?)',         val: splitUpi,  color: '#7c3aed' },
-              { key: 'card', label: 'Card (?)',        val: splitCard, color: '#1d4ed8' },
+              { key: 'cash', label: 'Cash (₹)',        val: splitCash, color: '#16a34a' },
+              { key: 'upi',  label: 'UPI (₹)',         val: splitUpi,  color: '#7c3aed' },
+              { key: 'card', label: 'Card (₹)',        val: splitCard, color: '#1d4ed8' },
             ].map(row => (
               <div key={row.key} className="flex items-center gap-2">
                 <label className="w-20 text-xs font-bold" style={{ color: row.color }}>{row.label}</label>
@@ -302,11 +302,11 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
             {/* Running total + remainder */}
             <div className="flex justify-between items-center pt-1 border-t" style={{ borderColor: '#e8d5a3' }}>
               <span className="text-xs font-bold" style={{ color: B.text }}>
-                Collected: ?{fmt(spTotal)}
+                Collected: ₹{fmt(spTotal)}
               </span>
               <span className="text-xs font-extrabold"
                 style={{ color: spValid ? '#16a34a' : '#dc2626' }}>
-                {spValid ? '? Matches total' : `Remaining: ?${fmt(spRemain)}`}
+                {spValid ? '✓ Matches total' : `Remaining: ₹${fmt(spRemain)}`}
               </span>
             </div>
           </div>
@@ -315,7 +315,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         {/* Tendered (cash only) */}
         {paymentMethod === 'cash' && (
           <div>
-            <label className="block text-sm font-semibold mb-1.5" style={{ color: B.text }}>Amount Tendered (?)</label>
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: B.text }}>Amount Tendered (₹)</label>
             <input ref={tenderedRef} type="number" value={amountTendered} onChange={e => setAmountTendered(e.target.value)}
               placeholder={fmt(grandTotal)} min={grandTotal} style={inputStyle} />
             <p className="text-xs mt-1" style={{ color: B.textLight }}>Press Enter to confirm — leave empty for exact amount</p>
@@ -325,7 +325,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
                   <button key={v} onClick={() => setAmountTendered(String(v))}
                     className="px-3 py-1 text-sm font-semibold rounded-lg transition-all active:scale-95"
                     style={{ background: '#fff9ee', border: B.goldBorder, color: B.text }}>
-                    ?{v}
+                    ₹{v}
                   </button>
                 ))}
             </div>
@@ -337,7 +337,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
           <div className="rounded-xl p-3 flex justify-between items-center"
             style={{ background: '#fffbe8', border: `1.5px solid ${B.gold}` }}>
             <span className="font-semibold" style={{ color: B.text }}>Change to Return</span>
-            <span className="font-extrabold text-2xl" style={{ color: B.goldDark }}>?{fmt(change)}</span>
+            <span className="font-extrabold text-2xl" style={{ color: B.goldDark }}>₹{fmt(change)}</span>
           </div>
         )}
 
@@ -347,7 +347,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
           className="w-full font-bold py-3.5 rounded-xl text-base uppercase tracking-wider transition-all active:scale-95 disabled:opacity-60"
           style={{ background: loading ? '#c8a84b' : B.goldGrad, color: B.brown, letterSpacing: '0.1em',
             boxShadow: '0 4px 15px rgba(180,130,10,0.35)' }}>
-          {loading ? 'Processing...' : `Confirm Payment  ?${fmt(grandTotal)}`}
+          {loading ? 'Processing...' : `Confirm Payment  ₹${fmt(grandTotal)}`}
         </button>
       </div>
     </Modal>
@@ -454,8 +454,8 @@ function HeldBillsModal({ onClose, onRetrieve }) {
                 <p className="text-xs" style={{ color: '#aaa' }}>{new Date(h.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
               </div>
               <div className="text-right">
-                <p className="font-bold" style={{ color: B.goldDark }}>?{fmt(h.grand_total)}</p>
-                <p className="text-xs" style={{ color: '#aaa' }}>Tax: ?{fmt(h.tax_total)}</p>
+                <p className="font-bold" style={{ color: B.goldDark }}>₹{fmt(h.grand_total)}</p>
+                <p className="text-xs" style={{ color: '#aaa' }}>Tax: ₹{fmt(h.tax_total)}</p>
               </div>
               <div className="flex flex-col gap-2">
                 <button onClick={() => handleRetrieve(h.hold_reference)}
@@ -506,7 +506,7 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
             <div className="flex justify-between items-start mb-2">
               <div className="flex-1 min-w-0 pr-2">
                 <p className="font-semibold text-sm truncate" style={{ color: B.text }}>{item.name}</p>
-                <p className="text-xs" style={{ color: B.textLight }}>?{fmt(item.selling_price)} each</p>
+                <p className="text-xs" style={{ color: B.textLight }}>₹{fmt(item.selling_price)} each</p>
                 {item.track_stock && item.current_stock != null && parseFloat(item.current_stock) <= 0 && (
                   <p className="text-xs font-bold mt-0.5" style={{ color: '#dc2626' }}>Out of stock</p>
                 )}
@@ -530,7 +530,7 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
                     const v = parseFloat(e.target.value);
                     if (!isNaN(v) && v > 0) setQuantity(item.id, v);
                     else if (v === 0) removeFromCart(item.id);
-                    else e.target.value = item.quantity;   // invalid ? revert
+                    else e.target.value = item.quantity;   // invalid → revert
                   }}
                   title="Click to type quantity"
                   className="w-12 text-center font-bold text-sm rounded-lg outline-none"
@@ -541,7 +541,7 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
                   style={{ background: B.goldGrad, color: B.brown }}>+</button>
               </div>
               <span className="font-bold text-sm" style={{ color: B.goldDark }}>
-                ?{fmt(parseFloat(item.selling_price) * item.quantity)}
+                ₹{fmt(parseFloat(item.selling_price) * item.quantity)}
               </span>
             </div>
           </div>
@@ -552,11 +552,11 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
       {cart.length > 0 && (
         <div className="p-4 flex-shrink-0" style={{ borderTop: B.goldBorder, background: '#fff9ee' }}>
           <div className="space-y-1 mb-4 text-sm">
-            <div className="flex justify-between" style={{ color: B.textLight }}><span>Subtotal</span><span>?{fmt(subtotal)}</span></div>
-            <div className="flex justify-between" style={{ color: B.textLight }}><span>GST</span><span>?{fmt(gstTotal)}</span></div>
+            <div className="flex justify-between" style={{ color: B.textLight }}><span>Subtotal</span><span>₹{fmt(subtotal)}</span></div>
+            <div className="flex justify-between" style={{ color: B.textLight }}><span>GST</span><span>₹{fmt(gstTotal)}</span></div>
             <div className="flex justify-between font-bold text-base pt-2" style={{ borderTop: `1px dashed ${B.gold}`, color: B.text }}>
               <span>Total</span>
-              <span style={{ color: B.goldDark }}>?{Math.round(grandTotal)}</span>
+              <span style={{ color: B.goldDark }}>₹{Math.round(grandTotal)}</span>
             </div>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -628,7 +628,7 @@ export default function Billing() {
     const later = () => setTimeout(focusSearch, 0);
     const onVisible = () => { if (!document.hidden) later(); };
     const onPointerUp = (e) => { if (!isField(e.target)) later(); };
-    // Leaving a cart qty box etc. without moving to another field ? back to barcode box
+    // Leaving a cart qty box etc. without moving to another field → back to barcode box
     const onFocusOut = (e) => { if (!isField(e.relatedTarget)) later(); };
     // Touch screens: don't pop the on-screen keyboard on every tap
     const touch = window.matchMedia?.('(pointer: coarse)').matches;
@@ -687,7 +687,7 @@ export default function Billing() {
   };
   const toggleSound = () => setSoundOn(s => { localStorage.setItem('billingSound', s ? '0' : '1'); return !s; });
 
-  // "3*101" / "101*3" / "101" / exact name ? { product, qty }
+  // "3*101" / "101*3" / "101" / exact name → { product, qty }
   const resolveEntry = (q) => {
     const byNameOrCode = (code) => {
       const c = code.trim().toLowerCase();
@@ -720,10 +720,10 @@ export default function Billing() {
   const lastItem = cart.find(i => i.id === lastAddedId) || cart[cart.length - 1];
 
   // Search box keys:
-  //   Enter      ? add code / "3*code" / highlighted suggestion; empty box ? checkout
-  //   ? ?        ? move through suggestions
-  //   + / -      ? (empty box) change qty of the last item · "*5" Enter sets it to 5
-  //   Delete     ? (empty box) remove last item · Shift/Ctrl+Delete ? clear cart
+  //   Enter      → add code / "3*code" / highlighted suggestion; empty box → checkout
+  //   ↑ ↓        → move through suggestions
+  //   + / -      → (empty box) change qty of the last item · "*5" Enter sets it to 5
+  //   Delete     → (empty box) remove last item · Shift/Ctrl+Delete → clear cart
   //   Scanners send Enter after the barcode, so they work the same way
   const handleSearchKeyDown = (e) => {
     const q = searchQuery.trim();
@@ -746,7 +746,7 @@ export default function Billing() {
     if (e.key === 'Escape') { e.preventDefault(); setSearchQuery(''); return; }
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    // "*5" ? set the last item's quantity
+    // "*5" → set the last item's quantity
     if (q.startsWith('*')) {
       const n = parseFloat(q.slice(1));
       if (lastItem && n > 0) { setQuantity(lastItem.id, n); flashScanMsg(`${lastItem.name} × ${n}`, true); beep(); }
@@ -771,7 +771,7 @@ export default function Billing() {
   const handleSearchChange = (q) => {
     setSearchQuery(q);
     setHi(0);
-    // Scan mode: exact barcode match ? add instantly (for scanners that don't send Enter)
+    // Scan mode: exact barcode match → add instantly (for scanners that don't send Enter)
     if (inputMode !== 'scan') return;
     const match = findByBarcode(q);
     if (match) { addToCart(match); setSearchQuery(''); flashScanMsg(`Added: ${match.name}`, true); beep(); }
@@ -785,7 +785,7 @@ export default function Billing() {
       (p.barcode && p.barcode.toLowerCase().includes(searchLower));
     return matchCat && matchSearch && p.active;
   });
-  // Dropdown suggestions while typing (Type mode) — ? ? to pick, Enter to add
+  // Dropdown suggestions while typing (Type mode) — ↑ ↓ to pick, Enter to add
   const suggestions = inputMode === 'text' && searchLower && !searchLower.includes('*') && !searchLower.startsWith('*')
     ? products.filter(p => p.active && (p.name.toLowerCase().includes(searchLower) ||
         (p.barcode && p.barcode.toLowerCase().startsWith(searchLower))))
@@ -827,7 +827,7 @@ export default function Billing() {
 
   const removeFromCart = (productId) => setCart(prev => prev.filter(i => i.id !== productId));
 
-  // Camera scan result ? add matching product, return status message for the modal
+  // Camera scan result → add matching product, return status message for the modal
   const handleScanResult = (code) => {
     const match = findByBarcode(code);
     if (!match) return `No product for barcode ${code}`;
@@ -893,7 +893,7 @@ export default function Billing() {
   };
 
   // Page-wide shortcuts (when no popup is open). Each F-key has an Alt+letter twin for laptops.
-  //   F1 / ?      shortcut list        F2          cursor to search box
+  //   F1 / →      shortcut list        F2          cursor to search box
   //   F8 / Alt+H  hold bill            F9 / Alt+B  held bills
   //   Alt+R       repeat last bill     Alt+1…9     quick-sale items
   const shortcutRef = useRef(null);
@@ -1112,7 +1112,7 @@ export default function Billing() {
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            {/* Suggestions while typing — ? ? to choose, Enter to add */}
+            {/* Suggestions while typing — ↑ ↓ to choose, Enter to add */}
             {suggestions.length > 0 && (
               <div className="mt-1.5 rounded-xl overflow-hidden shadow-lg" style={{ border: B.goldBorder, background: '#fff' }}>
                 {suggestions.map((p, i) => (
@@ -1126,7 +1126,7 @@ export default function Billing() {
                         style={{ background: '#fdf6e3', color: B.goldDark }}>{p.barcode}</span>}
                       <span className="font-semibold">{p.name}</span>
                     </span>
-                    <span className="font-bold text-xs flex-shrink-0 ml-2" style={{ color: B.goldDark }}>?{fmt(p.selling_price)}</span>
+                    <span className="font-bold text-xs flex-shrink-0 ml-2" style={{ color: B.goldDark }}>₹{fmt(p.selling_price)}</span>
                   </button>
                 ))}
               </div>
@@ -1148,7 +1148,7 @@ export default function Billing() {
                 {/* Big running total so the customer can get money ready */}
                 {cart.length > 0 && (
                   <span className="text-lg font-extrabold px-3 py-0.5 rounded-xl" style={{ background: B.bgGrad, color: B.goldLight }}>
-                    {cart.reduce((s, i) => s + i.quantity, 0)} items · ?{Math.round(grandTotal)}
+                    {cart.reduce((s, i) => s + i.quantity, 0)} items · ₹{Math.round(grandTotal)}
                   </span>
                 )}
               </div>
@@ -1215,7 +1215,7 @@ export default function Billing() {
                       <div className="p-2.5">
                         <p className="font-semibold text-sm leading-tight line-clamp-2" style={{ color: B.text }}>{product.name}</p>
                         {product.brand && <p className="text-xs mt-0.5" style={{ color: B.textLight }}>{product.brand}</p>}
-                        <p className="font-extrabold mt-1" style={{ color: B.goldDark }}>?{fmt(product.selling_price)}</p>
+                        <p className="font-extrabold mt-1" style={{ color: B.goldDark }}>₹{fmt(product.selling_price)}</p>
                         {outOfStock ? (
                           <span className="text-xs font-bold" style={{ color: '#dc2626' }}>Out of stock — selling anyway</span>
                         ) : lowStock && (
@@ -1283,7 +1283,7 @@ export default function Billing() {
               ['Adding items', [
                 ['101  Enter', 'Add product with code / barcode 101 (text or numbers)'],
                 ['3*101  or  101*3', 'Add 3 of that product'],
-                ['tea  ? ?  Enter', 'Search by name, pick from the list'],
+                ['tea  ↑ ↓  Enter', 'Search by name, pick from the list'],
                 ['Scan barcode', 'Adds the product'],
                 ['Alt + 1 … 9', 'Quick-sale items (marked "Quick sale" on the product)'],
                 ['Alt + R', 'Repeat the last bill'],
