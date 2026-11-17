@@ -340,6 +340,40 @@ export default function RawMaterialStock() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stock]);
 
+  // ── Item Purchase History: last purchase per material, by category ──────────
+  const [ihAll, setIhAll]       = useState(null);   // all purchases (newest first)
+  const [ihLoad, setIhLoad]     = useState(false);
+  const [ihCat, setIhCat]       = useState('');
+  const [ihSearch, setIhSearch] = useState('');
+  const [ihItem, setIhItem]     = useState(null);   // material whose full history popup is open
+  const loadItemHist = useCallback(async () => {
+    setIhLoad(true);
+    try { setIhAll((await getRawMaterialPurchases({})).data.purchases || []); }
+    catch (err) { if (!handleAuthErr(err)) showToast('Failed to load purchase history.', false); }
+    finally { setIhLoad(false); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleAuthErr]);
+  useEffect(() => { if (tab === 'items') loadItemHist(); }, [tab, loadItemHist]);   // fresh each time the tab opens
+  const purchasesOf = (id) => (ihAll || []).filter(p => Number(p.item_id) === Number(id));
+  const daysAgo = (d) => {
+    if (!d) return null;
+    const n = Math.round((new Date(today()) - new Date(String(d).slice(0, 10))) / 86400000);
+    return n <= 0 ? 'today' : n === 1 ? 'yesterday' : `${n} days ago`;
+  };
+  const ihRows = items
+    .filter(it => !ihCat || itemCatKey(it) === ihCat)
+    .filter(it => !ihSearch.trim() || it.name.toLowerCase().includes(ihSearch.trim().toLowerCase()))
+    .map(it => {
+      const list = purchasesOf(it.id);
+      return {
+        it, last: list[0] || null, count: list.length,
+        qty: list.reduce((s, p) => s + parseFloat(p.quantity || 0), 0),
+        spent: list.reduce((s, p) => s + parseFloat(p.amount || 0), 0),
+      };
+    })
+    // most recently bought first; never-bought at the end
+    .sort((a, b) => String(b.last?.purchase_date || '').localeCompare(String(a.last?.purchase_date || '')) || a.it.name.localeCompare(b.it.name));
+
   const inp = { borderColor: '#e8d5a3' };
 
   return (
@@ -413,8 +447,8 @@ export default function RawMaterialStock() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2">
-          {[{ key: 'purchase', label: 'Add Purchase & History' }, { key: 'stock', label: 'Stock in Hand' }].map(t => (
+        <div className="flex gap-2 flex-wrap">
+          {[{ key: 'purchase', label: 'Add Purchase & History' }, { key: 'stock', label: 'Stock in Hand' }, { key: 'items', label: 'Item Purchase History' }].map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className="px-5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
               style={tab === t.key
@@ -582,6 +616,87 @@ export default function RawMaterialStock() {
             )}
           </div>
           )}
+          </div>
+        )}
+
+        {/* ━━━━━━━━━━━━━━━━━━━━ Item purchase history (by category) ━━━━━━━━━━━━━━━━━━━━ */}
+        {tab === 'items' && (
+          <div className="space-y-4">
+            <div className="rounded-2xl p-4 shadow-sm flex flex-wrap items-end gap-4" style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
+              <div className="min-w-[240px]">
+                <label className="text-xs font-bold mb-1 block" style={{ color: B.textLight }}>Category</label>
+                <select value={ihCat} onChange={e => setIhCat(e.target.value)}
+                  className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none" style={{ borderColor: ihCat ? B.gold : '#e8d5a3' }}>
+                  <option value="">All categories</option>
+                  {stockCats.map(c => <option key={c.key} value={c.key}>{c.name} ({c.n} item{c.n !== 1 ? 's' : ''})</option>)}
+                </select>
+              </div>
+              <div className="flex-1 min-w-[180px]">
+                <label className="text-xs font-bold mb-1 block" style={{ color: B.textLight }}>Search material</label>
+                <input value={ihSearch} onChange={e => setIhSearch(e.target.value)} placeholder="e.g. Milk"
+                  className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none" style={inp} />
+              </div>
+              <button onClick={loadItemHist} className="text-sm font-bold px-4 py-2 rounded-xl"
+                style={{ background: '#fff9ee', border: '1px solid #e8d5a3', color: B.text }}>↻ Refresh</button>
+            </div>
+
+            <div className="rounded-2xl shadow-sm overflow-hidden" style={{ background: '#fff', border: '1px solid #e8d5a3' }}>
+              {ihLoad && !ihAll ? (
+                <div className="flex justify-center py-16">
+                  <div className="w-10 h-10 rounded-full border-4 animate-spin" style={{ borderColor: B.gold, borderTopColor: 'transparent' }} />
+                </div>
+              ) : ihRows.length === 0 ? (
+                <p className="text-center py-12 text-sm" style={{ color: B.textLight }}>No materials in this category.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ background: `linear-gradient(90deg,${B.darkBrown},${B.midBrown})` }}>
+                        {['Material', 'Last Purchased', 'Last Qty @ Rate', 'Last Supplier', 'Times Bought', 'Total Qty', 'Total Spent', ''].map(h => (
+                          <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: B.goldLight }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ihRows.map(({ it, last, count, qty, spent }, idx) => (
+                        <tr key={it.id} style={{ background: idx % 2 ? '#fffbf2' : '#fff', borderBottom: '1px solid #f0e0c0', opacity: it.active ? 1 : 0.5 }}>
+                          <td className="px-4 py-2.5">
+                            <div className="font-semibold" style={{ color: B.darkBrown }}>{it.name}</div>
+                            {it.category && <div className="text-xs text-gray-400">{it.category}</div>}
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap">
+                            {last ? (
+                              <>
+                                <div className="font-semibold" style={{ color: B.darkBrown }}>{String(last.purchase_date).slice(0, 10)}</div>
+                                <div className="text-xs" style={{ color: B.textLight }}>{daysAgo(last.purchase_date)}</div>
+                              </>
+                            ) : <span className="text-xs" style={{ color: '#9ca3af' }}>Never purchased</span>}
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap">
+                            {last ? <>{fmtQty(last.quantity)} {it.unit} <span className="text-xs" style={{ color: B.textLight }}>@ {fmtINR(last.rate)}</span></> : '—'}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs" style={{ color: B.darkBrown }}>
+                            {last ? (last.supplier_name || last.vendor || 'Local shop') : '—'}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">{count || '—'}</td>
+                          <td className="px-4 py-2.5 whitespace-nowrap">{count ? `${fmtQty(qty)} ${it.unit}` : '—'}</td>
+                          <td className="px-4 py-2.5 font-bold whitespace-nowrap" style={{ color: B.brown }}>{count ? fmtINR(spent) : '—'}</td>
+                          <td className="px-4 py-2.5">
+                            {count > 0 && (
+                              <button onClick={() => setIhItem(it)} className="text-xs font-bold px-3 py-1 rounded-lg whitespace-nowrap"
+                                style={{ background: '#e0f2fe', color: '#0369a1' }}>History</button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="px-4 py-2 text-xs" style={{ color: B.textLight }}>
+                Most recently purchased first. Click <strong>History</strong> to see every purchase of that material.
+              </p>
+            </div>
           </div>
         )}
 
@@ -874,6 +989,54 @@ export default function RawMaterialStock() {
           </>
         )}
       </div>
+
+      {/* One material's full purchase history */}
+      {ihItem && (() => {
+        const list = purchasesOf(ihItem.id);
+        const tQty = list.reduce((s, p) => s + parseFloat(p.quantity || 0), 0);
+        const tAmt = list.reduce((s, p) => s + parseFloat(p.amount || 0), 0);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(45,26,14,0.6)' }}
+            onClick={ev => { if (ev.target === ev.currentTarget) setIhItem(null); }}>
+            <div className="w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col" style={{ background: '#fff', border: `2px solid ${B.gold}` }}>
+              <div className="h-1 flex-shrink-0" style={{ background: `linear-gradient(90deg,#b8860b,${B.goldLight},#b8860b)` }} />
+              <div className="px-5 pt-4 pb-3 flex items-start justify-between flex-shrink-0">
+                <div>
+                  <h3 className="text-lg font-extrabold" style={{ color: B.brown }}>{ihItem.name} — Purchase History</h3>
+                  <p className="text-xs" style={{ color: B.textLight }}>
+                    {list.length} purchase{list.length !== 1 ? 's' : ''} · {fmtQty(tQty)} {ihItem.unit} · {fmtINR(tAmt)}
+                    {tQty > 0 && ` · avg ${fmtINR(tAmt / tQty)}/${ihItem.unit}`}
+                  </p>
+                </div>
+                <button onClick={() => setIhItem(null)} autoFocus className="text-2xl font-bold leading-none" style={{ color: B.textLight }}>×</button>
+              </div>
+              <div className="overflow-y-auto px-5 pb-5">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ background: '#fff9ee' }}>
+                      {['Date', 'Qty', 'Rate', 'Amount', 'Supplier', 'Invoice / Notes'].map(h => (
+                        <th key={h} className="px-3 py-2 text-left text-xs font-bold uppercase" style={{ color: B.textLight }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map(p => (
+                      <tr key={p.id} style={{ borderTop: '1px solid #f0e0c0' }}>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: B.darkBrown }}>{String(p.purchase_date).slice(0, 10)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{fmtQty(p.quantity)} {p.unit || ihItem.unit}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{fmtINR(p.rate)}</td>
+                        <td className="px-3 py-2 font-bold whitespace-nowrap" style={{ color: B.brown }}>{fmtINR(p.amount)}</td>
+                        <td className="px-3 py-2 text-xs">{p.supplier_name || p.vendor || 'Local shop'}</td>
+                        <td className="px-3 py-2 text-xs" style={{ color: B.textLight }}>{[p.bill_invoice_no, p.notes].filter(Boolean).join(' · ') || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Stock breakdown popup */}
       {stockDetail && (() => {

@@ -915,16 +915,26 @@ export default function DailyExpenses() {
                               style={{ background: '#f3e8ff', color: '#7c3aed' }}>
                               ₹ History
                             </button>
-                            <button onClick={() => openEdit(e)}
-                              className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
-                              style={{ background: '#dbeafe', color: '#1d4ed8' }}>
-                              Edit
-                            </button>
-                            <button onClick={() => handleDelete(e)}
-                              className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
-                              style={{ background: '#fee2e2', color: '#dc2626' }}>
-                              Delete
-                            </button>
+                            {e.source === 'raw_material' || e.source === 'raw_material_bill' ? (
+                              // Auto entries from Raw Material Stock — amount/items are edited there
+                              <span className="text-xs font-semibold px-2 py-1.5" style={{ color: '#a07020' }}
+                                title="Edit or delete the purchase on the Raw Material Stock page">
+                                From Raw Material Stock
+                              </span>
+                            ) : (
+                              <>
+                                <button onClick={() => openEdit(e)}
+                                  className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                                  style={{ background: '#dbeafe', color: '#1d4ed8' }}>
+                                  Edit
+                                </button>
+                                <button onClick={() => handleDelete(e)}
+                                  className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                                  style={{ background: '#fee2e2', color: '#dc2626' }}>
+                                  Delete
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
