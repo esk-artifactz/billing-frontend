@@ -248,6 +248,9 @@ export const getExpenseReport = (params = {}) => api.get('/expense-report', { pa
 export const getDailyExpenses    = (params = {}) => api.get('/daily-expenses', { params });
 export const createDailyExpense  = (data)        =>
   postWithFallback({ url: '/daily-expenses', data, label: 'Expense' });
+// Quick reminder typed at the billing counter → Unpaid expense in 'Billing Note (to review)'
+export const createBillingNote   = (data)        =>
+  postWithFallback({ url: '/daily-expenses/note', data, label: 'Expense note' });
 export const updateDailyExpense  = (id, data)    => api.put(`/daily-expenses/${id}`, data);
 export const deleteDailyExpense  = (id)          => api.delete(`/daily-expenses/${id}`);
 

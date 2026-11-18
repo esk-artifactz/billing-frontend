@@ -6,7 +6,7 @@ import {
   getProducts, getCategories,
   checkout as apiCheckout,
   holdSale, getHeldSales, getHeldSale, deleteHeldSale,
-  getReceipt, createCreditBill,
+  getReceipt, createCreditBill, createBillingNote,
 } from '../api/client';
 import OfflineBanner from '../components/OfflineBanner';
 import Receipt from '../components/Receipt';
@@ -389,6 +389,74 @@ function HoldNameModal({ initialName, isUpdate, onClose, onConfirm }) {
   );
 }
 
+// --- Expense Note Modal — reminder for Daily Expenses (completed at day end) ---
+
+const NOTE_QUICK = ['Milk', 'Puffs (outside vendor)', 'Daily Labour', 'Transport', 'Gas', 'Supplier Payment'];
+
+function ExpenseNoteModal({ onClose, onSaved }) {
+  const [text, setText]     = useState('');
+  const [amount, setAmount] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+  const textRef = useRef(null);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!text.trim()) { setError('Type what the note is for'); return; }
+    if (amount !== '' && !(parseFloat(amount) >= 0)) { setError('Enter a valid amount (or leave it empty)'); return; }
+    setSaving(true); setError('');
+    try {
+      const res = await createBillingNote({ text: text.trim(), amount: amount === '' ? 0 : parseFloat(amount) });
+      onSaved(res._offline ? 'Note saved offline — will sync later' : 'Note saved to Daily Expenses (to review)');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Could not save the note');
+      setSaving(false);
+    }
+  };
+  const input = { background: '#fff9ee', border: `1.5px solid ${B.gold}`, color: B.brown,
+                  borderRadius: 12, padding: '10px 14px', width: '100%', fontSize: 14, outline: 'none' };
+  return (
+    <Modal title="Expense Note" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        <p className="text-xs" style={{ color: B.textLight }}>
+          Quick reminder — it goes to Daily Expenses as <b>Unpaid</b> under &ldquo;Billing Note (to review)&rdquo;. Complete it there at day end.
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {NOTE_QUICK.map(q => (
+            <button key={q} type="button"
+              onClick={() => { setText(t => (t.trim() ? t : `${q} – `)); setError(''); textRef.current?.focus(); }}
+              className="text-xs font-bold px-2.5 py-1 rounded-full active:scale-95"
+              style={{ background: '#fff9ee', border: `1px solid ${B.gold}`, color: B.text }}>{q}</button>
+          ))}
+        </div>
+        <div>
+          <label className="block text-sm font-semibold mb-1" style={{ color: B.text }}>What *</label>
+          <input ref={textRef} type="text" value={text} onChange={e => { setText(e.target.value); setError(''); }}
+            placeholder="e.g. Milk vendor – 20 L, Puffs 30 pcs" maxLength={300} autoFocus style={input} />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold mb-1" style={{ color: B.text }}>
+            Amount (₹) <span className="font-normal text-xs" style={{ color: B.textLight }}>optional</span>
+          </label>
+          <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
+            placeholder="Leave empty if not known yet" style={input} />
+        </div>
+        {error && <p className="text-xs font-semibold text-red-600">{error}</p>}
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: '#f5f5f5', color: '#555' }}>
+            Cancel
+          </button>
+          <button type="submit" disabled={saving}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-all disabled:opacity-60"
+            style={{ background: B.goldGrad, color: B.brown }}>
+            {saving ? 'Saving…' : 'Save Note (Enter)'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // --- Held Bills Modal ---------------------------------------------------------
 
 function HeldBillsModal({ onClose, onRetrieve }) {
@@ -479,7 +547,7 @@ function HeldBillsModal({ onClose, onRetrieve }) {
 
 // --- Cart Panel ---------------------------------------------------------------
 
-function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onCheckout, onHold, onShowHeld, subtotal, gstTotal, grandTotal, lastId }) {
+function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onCheckout, onHold, onShowHeld, onNote, subtotal, gstTotal, grandTotal, lastId }) {
   return (
     <div className="flex flex-col flex-1 min-h-0 h-full" style={{ background: B.cream }}>
       {/* Header */}
@@ -488,11 +556,18 @@ function CartPanel({ cart, updateQuantity, setQuantity, removeFromCart, onChecko
         <h2 className="font-bold text-base" style={{ color: B.goldLight, fontFamily: 'Georgia, serif' }}>
           Cart <span style={{ color: B.gold }}>({cart.length})</span>
         </h2>
-        <button onClick={onShowHeld}
-          className="text-xs font-bold px-3 py-1.5 rounded-lg transition-all active:scale-95"
-          style={{ background: 'rgba(212,160,23,0.2)', color: B.goldLight, border: `1px solid ${B.gold}` }}>
-          Held Bills
-        </button>
+        <div className="flex gap-1.5">
+          <button onClick={onNote} title="Expense note for Daily Expenses (F10 / Alt+N)"
+            className="text-xs font-bold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+            style={{ background: 'rgba(212,160,23,0.2)', color: B.goldLight, border: `1px solid ${B.gold}` }}>
+            Note
+          </button>
+          <button onClick={onShowHeld}
+            className="text-xs font-bold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+            style={{ background: 'rgba(212,160,23,0.2)', color: B.goldLight, border: `1px solid ${B.gold}` }}>
+            Held Bills
+          </button>
+        </div>
       </div>
 
       {/* Items */}
@@ -602,7 +677,8 @@ export default function Billing() {
   const [showHelp, setShowHelp]             = useState(false);   // keyboard shortcut list (F1 / ?)
 
   // Close any open popup/overlay on Escape
-  const anyModalOpen = showCheckout || showHeld || showMobileCart || !!receiptData || showScanner || showHoldName || showHelp;
+  const [showNote, setShowNote]             = useState(false);   // expense note → Daily Expenses (F10 / Alt+N)
+  const anyModalOpen = showCheckout || showHeld || showMobileCart || !!receiptData || showScanner || showHoldName || showHelp || showNote;
   useEscClose(() => {
     if (showHelp)         { setShowHelp(false);         return; }
     if (showHoldName)     { setShowHoldName(false);     return; }
@@ -907,6 +983,7 @@ export default function Billing() {
     if (e.key === 'F2') return act(() => searchRef.current?.focus());
     if (e.key === 'F8' || (e.altKey && k === 'h')) return act(() => { if (cart.length) setShowHoldName(true); });
     if (e.key === 'F9' || (e.altKey && k === 'b')) return act(() => setShowHeld(true));
+    if (e.key === 'F10' || (e.altKey && k === 'n')) return act(() => setShowNote(true));
     if (e.altKey && k === 'r') return act(repeatLastBill);
     if (e.altKey && /^(Digit|Numpad)[1-9]$/.test(e.code)) {
       const item = quickItems[Number(e.code.slice(-1)) - 1];
@@ -956,6 +1033,7 @@ export default function Billing() {
     onCheckout: openCheckout,
     onHold: () => { if (cart.length) { setShowMobileCart(false); setShowHoldName(true); } },
     onShowHeld: () => { setShowMobileCart(false); setShowHeld(true); },
+    onNote: () => { setShowMobileCart(false); setShowNote(true); },
     subtotal, gstTotal, grandTotal,
   };
 
@@ -1141,6 +1219,10 @@ export default function Billing() {
                   style={{ background: soundOn ? '#dcfce7' : '#f3f4f6', color: soundOn ? '#16a34a' : '#6b7280' }}>
                   Sound {soundOn ? 'On' : 'Off'}
                 </button>
+                <button type="button" onClick={() => setShowNote(true)} title="Expense note for Daily Expenses"
+                  className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: '#fff', border: B.goldBorder, color: B.text }}>
+                  Note (F10)
+                </button>
                 <button type="button" onClick={() => setShowHelp(true)}
                   className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: '#fff', border: B.goldBorder, color: B.text }}>
                   Shortcuts (F1)
@@ -1272,6 +1354,8 @@ export default function Billing() {
       {showHeld      && <HeldBillsModal onClose={() => setShowHeld(false)} onRetrieve={handleRetrieveHeld} />}
       {showHoldName  && <HoldNameModal initialName={retrievedHoldName} isUpdate={!!retrievedHoldRef}
                           onClose={() => setShowHoldName(false)} onConfirm={handleHold} />}
+      {showNote      && <ExpenseNoteModal onClose={() => setShowNote(false)}
+                          onSaved={(msg) => { setShowNote(false); flashScanMsg(msg, true); }} />}
       {showScanner   && <BarcodeScannerModal onScan={handleScanResult} onClose={() => setShowScanner(false)} />}
       {receiptData   && <Receipt sale={receiptData.sale} items={receiptData.items} onClose={() => setReceiptData(null)} quickKeys />}
 
@@ -1305,6 +1389,7 @@ export default function Billing() {
               ['Other', [
                 ['F8 / Alt + H', 'Hold bill'],
                 ['F9 / Alt + B', 'Held bills'],
+                ['F10 / Alt + N', 'Expense note → Daily Expenses'],
                 ['F2', 'Cursor to the search box'],
                 ['F1 / ?', 'This list'],
                 ['Esc', 'Close any popup'],

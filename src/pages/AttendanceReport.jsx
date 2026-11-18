@@ -32,7 +32,7 @@ const STATUS_META = {
   leave:    { label: 'Leave',    color: '#7c3aed', bg: '#ede9fe' },
 };
 
-const EMPTY_EMP   = { emp_code: '', full_name: '', phone: '', role: 'Staff', default_designation_id: '', designation_effective_from: '', join_date: '' };
+const EMPTY_EMP   = { emp_code: '', full_name: '', phone: '', role: 'Staff', default_designation_id: '', designation_effective_from: '', join_date: '', is_daily_labour: false };
 // Bonus is added per employee for one month at a time, from the monthly report
 const BONUS_TYPES = ['Attendance', 'Festival', 'Performance', 'Other'];
 const EMPTY_DESIG = { name: '', daily_rate: '', ot_rate: '', description: '' };
@@ -360,6 +360,7 @@ export default function AttendanceReport() {
       default_designation_id: emp.default_designation_id || '',
       designation_effective_from: emp.designation_effective_from?.slice(0,10) || '',
       join_date:              emp.join_date?.slice(0,10) || '',
+      is_daily_labour:        !!emp.is_daily_labour,
     });
     setEditEmpId(emp.id); setEmpError(''); setEmpModal('edit');
   };
@@ -770,7 +771,12 @@ export default function AttendanceReport() {
                           style={{ background: idx % 2 === 0 ? '#fff' : '#fffbf2', borderBottom: '1px solid #f0e0c0',
                             opacity: emp.active === false ? 0.6 : 1 }}>
                           <td className="px-4 py-3 font-mono font-semibold text-xs" style={{ color: B.brown }}>{emp.emp_code}</td>
-                          <td className="px-4 py-3 font-semibold" style={{ color: B.darkBrown }}>{emp.full_name}</td>
+                          <td className="px-4 py-3 font-semibold" style={{ color: B.darkBrown }}>
+                            {emp.full_name}
+                            {emp.is_daily_labour && (
+                              <span className="ml-2 text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#fce7f3', color: '#be185d' }}>Daily labour</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-xs" style={{ color: '#7a4e08' }}>{emp.role}</td>
                           <td className="px-4 py-3 text-xs font-semibold" style={{ color: '#1d4ed8' }}>
                             {emp.designation_name || '—'}
@@ -1039,6 +1045,20 @@ export default function AttendanceReport() {
                       className={inpCls} style={inpSty} />
                   </div>
                 </div>
+
+                {/* Daily labour — each attendance day adds an Unpaid 'Labour' entry in Daily Expenses */}
+                <label className="flex items-start gap-3 cursor-pointer select-none rounded-xl p-3"
+                  style={{ background: '#fdf2f8', border: '1px solid #fbcfe8' }}>
+                  <input type="checkbox" checked={!!empForm.is_daily_labour} className="mt-0.5"
+                    onChange={e => setEmpForm(f => ({ ...f, is_daily_labour: e.target.checked }))} />
+                  <span>
+                    <span className="text-sm font-bold block" style={{ color: '#be185d' }}>Daily labour (paid every day)</span>
+                    <span className="text-xs" style={{ color: '#9d174d' }}>
+                      When attendance is marked Present / Half day, that day&apos;s pay is added to Daily Expenses as an
+                      Unpaid &ldquo;Labour&rdquo; entry. Mark it Paid there when you pay them.
+                    </span>
+                  </span>
+                </label>
 
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={closeEmpModal}

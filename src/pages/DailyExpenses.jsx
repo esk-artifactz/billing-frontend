@@ -8,6 +8,8 @@ import { getDailyExpenses, createDailyExpense, updateDailyExpense, deleteDailyEx
   getExpensePayments, addExpensePayment, deleteExpensePayment } from '../api/client';
 import OfflineBanner from '../components/OfflineBanner';
 
+const BILLING_NOTE_CAT = 'Billing Note (to review)';   // holding category for notes typed during billing
+
 const B = {
   darkBrown: '#2d1a0e', midBrown: '#4a2c0a', brown: '#3d2008',
   gold: '#d4a017', goldLight: '#f5c842', cream: '#fdf6e3', creamMid: '#f5ead0',
@@ -204,7 +206,19 @@ export default function DailyExpenses() {
     }
   };
 
+  // Notes typed at the billing counter that still need completing (last 60 days, any date)
+  const [pendingNotes, setPendingNotes] = useState([]);
+  const loadNotes = useCallback(async () => {
+    try {
+      const from = new Date(Date.now() - 60 * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const res = await getDailyExpenses({ from });
+      setPendingNotes((res.data.expenses || []).filter(x => x.category === BILLING_NOTE_CAT));
+    } catch { /* strip is optional */ }
+  }, []);
+  useEffect(() => { loadNotes(); }, [loadNotes]);
+
   const load = useCallback(async () => {
+    loadNotes();
     setLoading(true);
     try {
       const params = {};
@@ -231,7 +245,7 @@ export default function DailyExpenses() {
       setPendingExp(queued);
     } catch { /* IDB unavailable */ }
     setLoading(false);
-  }, [filterDate, filterMode, navigate, signOut]);
+  }, [filterDate, filterMode, navigate, signOut, loadNotes]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -531,6 +545,33 @@ export default function DailyExpenses() {
           </button>
         </div>
 
+        {/* Notes from Billing — reminders to complete (set real category / amount / payment) */}
+        {pendingNotes.length > 0 && (
+          <div className="rounded-2xl p-4 shadow-sm" style={{ background: '#fff1f2', border: '1.5px solid #fda4af' }}>
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+              <p className="text-sm font-extrabold" style={{ color: '#be123c' }}>
+                Notes from Billing ({pendingNotes.length}) — to review
+              </p>
+              <p className="text-xs" style={{ color: '#9f1239' }}>
+                Click a note → choose the real category, amount &amp; payment → Save. It then becomes a normal expense.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {pendingNotes.map(n => (
+                <button key={n.id} onClick={() => openEdit(n)}
+                  className="text-left rounded-xl px-3 py-2 text-xs active:scale-95"
+                  style={{ background: '#fff', border: '1px solid #fecdd3', color: B.darkBrown }}>
+                  <span className="font-bold">{n.description}</span>
+                  <span className="ml-2" style={{ color: '#be123c' }}>
+                    {parseFloat(n.amount) > 0 ? fmtINR(n.amount) : 'Amount pending'}
+                  </span>
+                  <span className="block" style={{ color: '#9ca3af' }}>{n.expense_date?.slice(0, 10)} · {n.notes || ''}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Summary cards */}
         {!loading && (expenses.length > 0 || (showAdvances && (advances.length > 0 || payouts.length > 0))) && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -803,7 +844,15 @@ export default function DailyExpenses() {
                           </span>
                         </td>
                         <td className="px-4 py-3 font-semibold max-w-[200px]" style={{ color: B.darkBrown }}>
-                          <div className="truncate" title={e.description}>{e.description}</div>
+                          <div className="truncate" title={e.description}>
+                            {e.source === 'billing_note' && (
+                              <span className="mr-1 text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#ffe4e6', color: '#be123c' }}>From Billing</span>
+                            )}
+                            {e.source === 'daily_labour' && (
+                              <span className="mr-1 text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#fce7f3', color: '#be185d' }}>Attendance</span>
+                            )}
+                            {e.description}
+                          </div>
                           {e.notes && <div className="text-xs text-gray-400 truncate" title={e.notes}>{e.notes}</div>}
                         </td>
                         <td className="px-4 py-3 text-xs" style={{ color: B.textLight }}>{e.paid_to || '—'}</td>
@@ -921,6 +970,19 @@ export default function DailyExpenses() {
                                 title="Edit or delete the purchase on the Raw Material Stock page">
                                 From Raw Material Stock
                               </span>
+                            ) : e.source === 'daily_labour' ? (
+                              // Day's pay comes from attendance — change the attendance to change it
+                              <>
+                                <span className="text-xs font-semibold px-2 py-1.5" style={{ color: '#be185d' }}
+                                  title="Amount = that day's pay from attendance. Change the attendance to change it.">
+                                  From Attendance
+                                </span>
+                                <button onClick={() => handleDelete(e)}
+                                  className="text-xs font-bold px-3 py-1.5 rounded-lg active:scale-95"
+                                  style={{ background: '#fee2e2', color: '#dc2626' }}>
+                                  Delete
+                                </button>
+                              </>
                             ) : (
                               <>
                                 <button onClick={() => openEdit(e)}
