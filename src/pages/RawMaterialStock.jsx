@@ -169,9 +169,9 @@ export default function RawMaterialStock() {
         lines: valid.map(l => ({ item_id: l.item_id, quantity: parseFloat(l.quantity), rate: parseFloat(l.rate) })),
       });
       const { total, paid, pending } = res.data;
-      showToast(supplierId
-        ? `Bill ${fmtINR(total)} added to ${supplierById(supplierId)?.name || 'supplier'} ledger — paid ${fmtINR(paid)}${pending > 0 ? `, pending ${fmtINR(pending)}` : ''}`
-        : `Purchase of ${fmtINR(total)} saved — Daily Expense "Raw Material Cost" (${pMode.toUpperCase()}) updated`);
+      // Recorded in Raw Material stock only — add the expense in Daily Expenses yourself
+      showToast(`Purchase of ${fmtINR(total)} saved to stock`
+        + (supplierId ? ` — ${supplierById(supplierId)?.name || 'supplier'}: paid ${fmtINR(paid)}${pending > 0 ? `, pending ${fmtINR(pending)}` : ''}` : ''));
       setLines([{ ...EMPTY_LINE }]); setNotes(''); setInvoiceNo(''); setPaidAmt('');
       loadStock(); loadHist();
     } catch (err) {
@@ -188,15 +188,15 @@ export default function RawMaterialStock() {
     try {
       await updateRawMaterialPurchase(editId, editRow);
       setEditId(null); setEditRow(null);
-      showToast('Purchase updated — Daily Expense total adjusted');
+      showToast('Purchase updated');
       loadStock(); loadHist();
     } catch (err) { if (!handleAuthErr(err)) showToast(err.response?.data?.detail || 'Update failed.', false); }
   };
   const removePurchase = async (p) => {
-    if (!window.confirm(`Delete purchase of ${fmtQty(p.quantity)} ${p.unit} ${p.item_name} (${fmtINR(p.amount)})?\nThe Daily Expense total for ${p.purchase_date?.slice(0, 10)} will be reduced.`)) return;
+    if (!window.confirm(`Delete purchase of ${fmtQty(p.quantity)} ${p.unit} ${p.item_name} (${fmtINR(p.amount)})?`)) return;
     try {
       await deleteRawMaterialPurchase(p.id);
-      showToast('Purchase deleted — Daily Expense total adjusted');
+      showToast('Purchase deleted');
       loadStock(); loadHist();
     } catch (err) { if (!handleAuthErr(err)) showToast(err.response?.data?.detail || 'Delete failed.', false); }
   };
@@ -428,7 +428,7 @@ export default function RawMaterialStock() {
             <div>
               <h2 className="text-xl font-extrabold" style={{ color: B.goldLight, fontFamily: 'Georgia, serif' }}>Raw Material Stock</h2>
               <p className="text-sm mt-1" style={{ color: '#c8a84b' }}>
-                Add purchases with price — each day&apos;s total is added to Daily Expenses as &ldquo;Raw Material Cost&rdquo;
+                Add purchases with price to keep stock &amp; purchase history — add the expense in Daily Expenses separately
               </p>
             </div>
             {stock && (
@@ -830,7 +830,7 @@ export default function RawMaterialStock() {
                 </table>
               </div>
 
-              {/* Payment — credit only possible with a supplier (goes to the supplier ledger) */}
+              {/* Payment status — kept on the purchase for your record (no Daily Expense / ledger entry) */}
               {supplierId && (
                 <div className="rounded-xl p-3 space-y-2" style={{ background: '#fffbf2', border: '1px solid #e8d5a3' }}>
                   <div className="flex gap-2">
@@ -851,7 +851,7 @@ export default function RawMaterialStock() {
                   <div className="flex justify-between text-xs font-semibold" style={{ color: B.text }}>
                     <span>Bill {fmtINR(formTotal)} · Paid now {fmtINR(paidNow)}</span>
                     <span style={{ color: formTotal - paidNow > 0 ? '#dc2626' : '#16a34a' }}>
-                      {formTotal - paidNow > 0 ? `Pending ${fmtINR(formTotal - paidNow)} → supplier ledger` : 'Fully paid'}
+                      {formTotal - paidNow > 0 ? `Pending ${fmtINR(formTotal - paidNow)}` : 'Fully paid'}
                     </span>
                   </div>
                 </div>
@@ -862,9 +862,7 @@ export default function RawMaterialStock() {
               {formErr && <p className="text-sm font-semibold text-red-600">{formErr}</p>}
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <p className="text-xs" style={{ color: B.textLight }}>
-                  {paidNow > 0
-                    ? <>Adds {fmtINR(paidNow)} to Daily Expenses → &ldquo;Raw Material Cost&rdquo; ({pMode.toUpperCase()}) for {pDate}</>
-                    : <>Nothing paid now — the full amount is pending in the supplier ledger</>}
+                  Saved to raw material stock only — add the expense in Daily Expenses when you pay.
                 </p>
                 <button type="submit" disabled={saving}
                   className="font-bold px-6 py-2.5 rounded-xl text-sm active:scale-95 disabled:opacity-60"

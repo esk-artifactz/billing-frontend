@@ -9,6 +9,9 @@ import { getDailyExpenses, createDailyExpense, updateDailyExpense, deleteDailyEx
 import OfflineBanner from '../components/OfflineBanner';
 
 const BILLING_NOTE_CAT = 'Billing Note (to review)';   // holding category for notes typed during billing
+// Categories where a supplier can be picked (auto-fills Paid To)
+const SUPPLIER_CATS = ['Supplier Payment', 'Raw Material Cost'];
+const isSupplierCat = (c) => SUPPLIER_CATS.includes(c);
 
 const B = {
   darkBrown: '#2d1a0e', midBrown: '#4a2c0a', brown: '#3d2008',
@@ -287,14 +290,15 @@ export default function DailyExpenses() {
         const sup = suppliers.find(s => String(s.id) === String(value));
         if (sup) {
           updated.paid_to = sup.name;
-          if (!f.description) updated.description = `Payment to ${sup.name}`;
+          if (!f.description) updated.description = f.category === 'Raw Material Cost'
+            ? `Raw material from ${sup.name}` : `Payment to ${sup.name}`;
         } else {
           updated.paid_to = '';
         }
       }
       // When category changes, clear supplier_id / employee_id when they no longer apply
       if (name === 'category') {
-        if (value !== 'Supplier Payment') updated.supplier_id = '';
+        if (!isSupplierCat(value)) updated.supplier_id = '';
         if (!SALARY_CAT.test(value))      updated.employee_id = '';
       }
       // Employee picked → auto-fill Paid To + Description for salary entries
@@ -1133,15 +1137,15 @@ export default function DailyExpenses() {
                   <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>Category *</label>
                   <select name="category" value={form.category} onChange={handleChange}
                     className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none font-semibold"
-                    style={{ borderColor: form.category === 'Supplier Payment' ? B.gold : '#e8d5a3',
-                      background: form.category === 'Supplier Payment' ? '#fff8e7' : '#fff' }}>
+                    style={{ borderColor: isSupplierCat(form.category) ? B.gold : '#e8d5a3',
+                      background: isSupplierCat(form.category) ? '#fff8e7' : '#fff' }}>
                     <option value="">— Select Category —</option>
                     {categories.map(c => <option key={c.name ?? c} value={c.name ?? c}>{c.name ?? c}</option>)}
                   </select>
                 </div>
 
-                {/* Supplier dropdown — shown only when category is Supplier Payment */}
-                {form.category === 'Supplier Payment' && (
+                {/* Supplier dropdown — shown for Supplier Payment and Raw Material Cost */}
+                {isSupplierCat(form.category) && (
                   <div className="rounded-xl p-3 border" style={{ background: '#fff8e7', borderColor: B.gold }}>
                     <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>
                       Select Supplier
@@ -1200,7 +1204,9 @@ export default function DailyExpenses() {
                     style={{ borderColor: '#e8d5a3' }}
                     placeholder={form.category === 'Supplier Payment'
                       ? 'e.g. Payment for October tea powder invoice'
-                      : 'e.g. Bought gram flour 5kg from market'} />
+                      : form.category === 'Raw Material Cost'
+                        ? 'e.g. Milk 20 L, Sugar 10 kg'
+                        : 'e.g. Bought gram flour 5kg from market'} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1213,14 +1219,14 @@ export default function DailyExpenses() {
                   <div>
                     <label className="text-xs font-bold mb-1 block" style={{ color: B.brown }}>
                       Paid To
-                      {form.category === 'Supplier Payment' && form.paid_to && (
+                      {isSupplierCat(form.category) && form.supplier_id && form.paid_to && (
                         <span className="ml-1 font-normal text-green-600">(auto-filled)</span>
                       )}
                     </label>
                     <input type="text" name="paid_to" value={form.paid_to} onChange={handleChange}
                       className="w-full border-2 rounded-xl px-3 py-2 text-sm outline-none"
-                      style={{ borderColor: form.paid_to && form.category === 'Supplier Payment' ? '#16a34a' : '#e8d5a3',
-                        background: form.paid_to && form.category === 'Supplier Payment' ? '#f0fdf4' : '#fff' }}
+                      style={{ borderColor: form.paid_to && isSupplierCat(form.category) ? '#16a34a' : '#e8d5a3',
+                        background: form.paid_to && isSupplierCat(form.category) ? '#f0fdf4' : '#fff' }}
                       placeholder="Vendor / shop / supplier name" />
                   </div>
                 </div>

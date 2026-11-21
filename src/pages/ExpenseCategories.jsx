@@ -116,7 +116,7 @@ export default function ExpenseCategories() {
 
   // Supplier Payment drill-down: split by supplier (Paid To) + filter
   const [catSupplier, setCatSupplier] = useState('');   // '' = all suppliers
-  const isSupplierCat = (openCat || '').trim().toLowerCase() === 'supplier payment';
+  const isSupplierCat = ['supplier payment', 'raw material cost'].includes((openCat || '').trim().toLowerCase());
   const supKey = (e) => (e.paid_to || '').trim() || 'Unspecified';
   const supplierSplit = isSupplierCat
     ? Object.values(catTxns.reduce((acc, e) => {
